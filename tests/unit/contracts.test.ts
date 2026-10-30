@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import { creatorSettingsSchema, queueMessageSchema } from "../../shared/contracts/domain.js"
 import { decryptSecret, encryptSecret, hmacSha256Hex } from "../../worker/lib/crypto.js"
+import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/nomination.js"
+import { buildMetadataPrompt, fallbackMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
+import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
 
 describe("MomentMint contracts", () => {
   it("accepts only ID-based queue messages", () => {
@@ -22,5 +25,31 @@ describe("MomentMint contracts", () => {
 
   it("creates a Twitch-compatible HMAC hex digest", async () => {
     await expect(hmacSha256Hex("message-id2026-10-30T00:00:00Zbody", "secret")).resolves.toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it("accepts only the exact nomination command and groups by fixed nearest anchor", () => {
+    expect(isMomentCommand("  !MOMENT ")).toBe(true)
+    expect(isMomentCommand("!momentplease")).toBe(false)
+    const candidates = [
+      { id: "b", anchor_eventsub_at: "2026-10-30T00:00:10.000Z", group_window_seconds: 30 },
+      { id: "a", anchor_eventsub_at: "2026-10-30T00:00:00.000Z", group_window_seconds: 30 },
+    ]
+    expect(selectGroupingCandidate(candidates, Date.parse("2026-10-30T00:00:30.000Z"))?.id).toBe("b")
+    expect(selectGroupingCandidate(candidates, Date.parse("2026-10-30T00:00:40.000Z"))?.id).toBe("b")
+    expect(selectGroupingCandidate(candidates, Date.parse("2026-10-30T00:00:41.000Z"))).toBeUndefined()
+  })
+
+  it("enforces domain state transitions", () => {
+    expect(canTransitionMoment("COLLECTING", "THRESHOLD_MET")).toBe(true)
+    expect(canTransitionMoment("CLIP_READY", "COLLECTING")).toBe(false)
+    expect(canTransitionClipJob("VERIFYING", "READY_FOR_REVIEW")).toBe(true)
+    expect(canTransitionClipJob("READY_FOR_REVIEW", "CREATING")).toBe(false)
+  })
+
+  it("validates AI JSON and provides grounded fallback metadata", () => {
+    expect(parseMetadataOutput({ response: '{"title":"A clutch save","summary":"Community nominated highlight","category":"clutch","socialCaption":"A clutch save from the stream."}' })?.category).toBe("clutch")
+    expect(parseMetadataOutput({ response: '{"title":"invented","summary":"bad","category":"not-real","socialCaption":"x"}' })).toBeNull()
+    expect(buildMetadataPrompt({ approximateTimestamp: "2026-10-30T00:00:00Z", distinctNominatorCount: 2 })).toContain("NOT watched the video")
+    expect(fallbackMetadata({ anchor_eventsub_at: "2026-10-30T00:00:00Z", unique_nominator_count: 2 }).summary).toContain("2 distinct viewers")
   })
 })

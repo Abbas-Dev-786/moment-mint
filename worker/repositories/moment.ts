@@ -18,8 +18,16 @@ export type MomentRow = {
 export const findMomentForCreator = (db: D1Database, creatorId: string, momentId: string) =>
   db.prepare("SELECT * FROM moments WHERE id = ?1 AND creator_id = ?2").bind(momentId, creatorId).first<MomentRow>()
 
-export const listMomentsForCreator = (db: D1Database, creatorId: string, limit = 50) =>
-  db.prepare("SELECT * FROM moments WHERE creator_id = ?1 ORDER BY created_at DESC LIMIT ?2").bind(creatorId, limit).all<MomentRow>()
+export const listMomentsForCreator = (db: D1Database, creatorId: string, limit = 50, status?: string) =>
+  status
+    ? db.prepare("SELECT * FROM moments WHERE creator_id = ?1 AND status = ?2 ORDER BY created_at DESC LIMIT ?3").bind(creatorId, status, limit).all<MomentRow>()
+    : db.prepare("SELECT * FROM moments WHERE creator_id = ?1 ORDER BY created_at DESC LIMIT ?2").bind(creatorId, limit).all<MomentRow>()
+
+export const findMomentWithCreator = (db: D1Database, momentId: string) =>
+  db.prepare("SELECT moments.*, creators.twitch_user_id, creators.settings_json, creators.twitch_login, stream_sessions.title AS stream_title, stream_sessions.category_name, ai_metadata.creator_note FROM moments JOIN creators ON creators.id = moments.creator_id JOIN stream_sessions ON stream_sessions.id = moments.stream_session_id LEFT JOIN ai_metadata ON ai_metadata.moment_id = moments.id WHERE moments.id = ?1").bind(momentId).first<MomentRow & { twitch_user_id: string; settings_json: string; twitch_login: string; stream_title: string | null; category_name: string | null; creator_note: string | null }>()
+
+export const findOpenMomentsForSession = (db: D1Database, creatorId: string, streamSessionId: string) =>
+  db.prepare("SELECT * FROM moments WHERE creator_id = ?1 AND stream_session_id = ?2 AND status = 'COLLECTING' ORDER BY anchor_eventsub_at ASC, id ASC LIMIT 100").bind(creatorId, streamSessionId).all<MomentRow>()
 
 export const createMoment = (db: D1Database, input: { creatorId: string; streamSessionId: string; anchorEventsubAt: string; anchorReceivedAt: string; groupWindowSeconds: number; thresholdRequired: number }) => {
   const timestamp = nowIso()
@@ -31,3 +39,9 @@ export const createNominationIfNew = (db: D1Database, input: { id: string; momen
 
 export const refreshMomentNominatorCount = (db: D1Database, creatorId: string, momentId: string) =>
   db.prepare("UPDATE moments SET unique_nominator_count = (SELECT COUNT(*) FROM nominations WHERE moment_id = moments.id), updated_at = ?1 WHERE id = ?2 AND creator_id = ?3").bind(nowIso(), momentId, creatorId).run()
+
+export const markMomentThresholdMet = (db: D1Database, creatorId: string, momentId: string, thresholdMetAt: string) =>
+  db.prepare("UPDATE moments SET status = 'THRESHOLD_MET', threshold_met_at = ?1, updated_at = ?1 WHERE id = ?2 AND creator_id = ?3 AND status = 'COLLECTING'").bind(thresholdMetAt, momentId, creatorId).run()
+
+export const transitionMoment = (db: D1Database, creatorId: string, momentId: string, from: string, to: string) =>
+  db.prepare("UPDATE moments SET status = ?1, updated_at = ?2 WHERE id = ?3 AND creator_id = ?4 AND status = ?5").bind(to, nowIso(), momentId, creatorId, from).run()

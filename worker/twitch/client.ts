@@ -8,6 +8,19 @@ const TWITCH_OAUTH = "https://id.twitch.tv/oauth2"
 
 export const requiredScopes = ["user:read:chat", "clips:edit"] as const
 
+export class TwitchApiError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly retryable: boolean
+
+  constructor(status: number, code: string, retryable: boolean) {
+    super(code)
+    this.status = status
+    this.code = code
+    this.retryable = retryable
+  }
+}
+
 export type TwitchTokenValidation = {
   client_id: string
   login: string
@@ -16,8 +29,12 @@ export type TwitchTokenValidation = {
   expires_in: number
 }
 
+type TwitchCreator = Pick<CreatorRow, "id" | "twitch_user_id" | "access_token_ciphertext" | "access_token_iv" | "refresh_token_ciphertext" | "refresh_token_iv" | "token_expires_at">
+
 const twitchResponse = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) throw new Error(`TWITCH_HTTP_${response.status}`)
+  if (!response.ok) {
+    throw new TwitchApiError(response.status, response.status === 401 || response.status === 403 ? "RECONNECT_REQUIRED" : response.status === 429 ? "TWITCH_RATE_LIMITED" : response.status >= 500 ? "TWITCH_UNAVAILABLE" : "TWITCH_API_ERROR", response.status === 429 || response.status >= 500)
+  }
   return response.json() as Promise<T>
 }
 
@@ -39,17 +56,25 @@ export const revokeToken = async (clientId: string, accessToken: string) => {
   await fetch(`${TWITCH_OAUTH}/revoke?client_id=${encodeURIComponent(clientId)}&token=${encodeURIComponent(accessToken)}`, { method: "POST" })
 }
 
-const authorizedFetch = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow, path: string, init?: RequestInit) => {
+const authorizedFetch = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, path: string, init?: RequestInit) => {
   const token = await ensureCreatorAccessToken(env.DB, env, creator)
   const headers = new Headers(init?.headers)
   headers.set("Client-Id", env.TWITCH_CLIENT_ID)
   headers.set("Authorization", `Bearer ${token}`)
-  return fetch(`${TWITCH_API}${path}`, { ...init, headers })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8_000)
+  try {
+    return await fetch(`${TWITCH_API}${path}`, { ...init, headers, signal: controller.signal })
+  } catch (error) {
+    throw new TwitchApiError(0, error instanceof DOMException && error.name === "AbortError" ? "TWITCH_TIMEOUT" : "TWITCH_NETWORK_ERROR", true)
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
-const tokenStillValid = (creator: CreatorRow) => creator.token_expires_at && Date.parse(creator.token_expires_at) > Date.now() + 60_000
+const tokenStillValid = (creator: TwitchCreator) => Boolean(creator.token_expires_at && Date.parse(creator.token_expires_at) > Date.now() + 60_000)
 
-export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow) => {
+export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator) => {
   if (!creator.access_token_ciphertext || !creator.access_token_iv) throw new Error("RECONNECT_REQUIRED")
   if (tokenStillValid(creator)) return decryptSecret(creator.access_token_ciphertext, creator.access_token_iv, env.TOKEN_ENCRYPTION_KEY)
   if (!creator.refresh_token_ciphertext || !creator.refresh_token_iv) {
@@ -70,7 +95,7 @@ export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLI
   }
 }
 
-export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string; APP_BASE_URL: string; EVENTSUB_SECRET: string }, creator: CreatorRow) => {
+export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string; APP_BASE_URL: string; EVENTSUB_SECRET: string }, creator: TwitchCreator) => {
   const condition = { broadcaster_user_id: creator.twitch_user_id, user_id: creator.twitch_user_id }
   const response = await authorizedFetch(env, creator, "/eventsub/subscriptions", {
     method: "POST",
@@ -80,7 +105,32 @@ export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLI
   return twitchResponse<{ data: [{ id: string; status: string; condition: Record<string, string> }] }>(response)
 }
 
-export const deleteSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow, subscriptionId: string) => {
+export const deleteSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, subscriptionId: string) => {
   const response = await authorizedFetch(env, creator, `/eventsub/subscriptions?id=${encodeURIComponent(subscriptionId)}`, { method: "DELETE" })
   if (!response.ok && response.status !== 404) throw new Error(`TWITCH_HTTP_${response.status}`)
+}
+
+export type TwitchClipRecord = {
+  id: string
+  url: string
+  embed_url: string
+  title: string
+  thumbnail_url: string
+  duration: number
+  broadcaster_id: string
+  vod_offset: number | null
+}
+
+export const createClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator) => {
+  const response = await authorizedFetch(env, creator, `/clips?broadcaster_id=${encodeURIComponent(creator.twitch_user_id)}`, { method: "POST" })
+  const body = await twitchResponse<{ data?: [{ id?: string; edit_url?: string }] }>(response)
+  const created = body.data?.[0]
+  if (!created?.id || !created.edit_url) throw new TwitchApiError(200, "TWITCH_MALFORMED_CLIP_RESPONSE", false)
+  return { id: created.id, editUrl: created.edit_url }
+}
+
+export const getClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, clipId: string) => {
+  const response = await authorizedFetch(env, creator, `/clips?id=${encodeURIComponent(clipId)}`, { method: "GET" })
+  const body = await twitchResponse<{ data?: TwitchClipRecord[] }>(response)
+  return body.data?.[0] ?? null
 }

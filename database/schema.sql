@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS ai_metadata (
   category TEXT NOT NULL,
   social_caption TEXT NOT NULL,
   prompt_version TEXT NOT NULL,
+  creator_note TEXT,
   generated_at TEXT,
   updated_at TEXT NOT NULL
 );

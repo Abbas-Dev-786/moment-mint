@@ -4,9 +4,9 @@ MomentMint turns Twitch viewers' `!moment` nominations into a creator-controlled
 
 ## Current status
 
-Phases 1–3 are implemented: the repository now includes D1 schema/migrations, scoped repositories, ID-only Queue contracts and reconciliation, encrypted Twitch OAuth/session handling, EventSub registration, webhook HMAC/replay protection, notification deduplication, and revocation handling. The UI remains the Phase 0 shell while the moment domain arrives in Phase 4.
+Phases 1–6 are implemented: the repository now includes durable D1/Queue foundations, encrypted Twitch OAuth/session handling, EventSub ingestion, nomination grouping with distinct-viewer thresholds, verified Twitch clip jobs, and creator-triggered Workers AI metadata with deterministic fallback. The UI remains the Phase 0 shell while dashboard work arrives in Phase 7.
 
-Moment grouping, clips, AI metadata, and live dashboard data remain planned for later phases. See [the master implementation plan](plans/master-plan.md) and [the phase plans](plans/).
+Live dashboard data and product UI integration remain planned for Phase 7. See [the master implementation plan](plans/master-plan.md) and [the phase plans](plans/).
 
 ## Local development
 

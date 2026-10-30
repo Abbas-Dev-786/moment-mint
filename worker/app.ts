@@ -5,6 +5,8 @@ import type { ApiError, ApiSuccess } from "../shared/contracts/http.js"
 import type { AppBindings } from "./env.js"
 import { disconnect, logout, me, oauthCallback, oauthStart, requireCreator } from "./oauth.js"
 import { eventSubStatus, registerEventSub, webhook } from "./eventsub.js"
+import { editMetadata, getClipEditUrl, getMoment, listMoments, requestClip, requestMetadata, retryClip, reviewMoment } from "./routes/moments.js"
+import { aiSmokeTest } from "./routes/ai.js"
 
 type AppEnv = { Bindings: AppBindings; Variables: { creatorId: string } }
 export const app = new Hono<AppEnv>()
@@ -34,6 +36,15 @@ app.post("/api/auth/logout", logout)
 app.post("/api/twitch/disconnect", disconnect)
 app.post("/api/twitch/eventsub", registerEventSub)
 app.get("/api/twitch/eventsub", eventSubStatus)
+app.post("/api/ai/smoke-test", aiSmokeTest)
+app.get("/api/moments", listMoments)
+app.get("/api/moments/:momentId", getMoment)
+app.post("/api/moments/:momentId/clip", requestClip)
+app.post("/api/moments/:momentId/ai-metadata", requestMetadata)
+app.patch("/api/moments/:momentId/metadata", editMetadata)
+app.post("/api/moments/:momentId/review", reviewMoment)
+app.post("/api/clip-jobs/:clipJobId/retry", retryClip)
+app.get("/api/clip-jobs/:clipJobId/edit-url", getClipEditUrl)
 
 app.notFound((c: AppContext) => {
   const response: ApiError = {

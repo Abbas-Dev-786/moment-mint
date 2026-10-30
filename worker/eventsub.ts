@@ -11,13 +11,17 @@ import type { AuthContext } from "./oauth.js"
 
 const replayWindowMs = 10 * 60_000
 
-const safeEventPayload = (event: Record<string, unknown>) => ({
+const safeEventPayload = (event: Record<string, unknown>) => {
+  const messageText = typeof event.message === "object" && event.message !== null && "text" in event.message && typeof event.message.text === "string" ? event.message.text.trim() : null
+  return {
   broadcaster_user_id: typeof event.broadcaster_user_id === "string" ? event.broadcaster_user_id : null,
   chatter_user_id: typeof event.chatter_user_id === "string" ? event.chatter_user_id : null,
   message_id: typeof event.message_id === "string" ? event.message_id : null,
-  message_text: typeof event.message === "object" && event.message !== null && "text" in event.message && typeof event.message.text === "string" ? event.message.text : null,
+  // Only retain the exact nomination command. Ordinary chat is not a durable product record.
+  message_text: messageText?.toLowerCase() === "!moment" ? messageText : null,
   message_type: typeof event.message_type === "string" ? event.message_type : null,
-})
+  }
+}
 
 const eventSubContext = async (c: Context<{ Bindings: AuthContext["env"] }>, payload: { subscription: { id: string; condition: { broadcaster_user_id: string } } }) => {
   const stored = await findSubscriptionByTwitchId(c.env.DB, payload.subscription.id)

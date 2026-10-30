@@ -48,3 +48,19 @@ export const errorCodes = [
 ] as const
 
 export type SafeErrorCode = (typeof errorCodes)[number]
+
+export const aiCategorySchema = z.enum(["funny", "clutch", "surprise", "wholesome", "reaction", "other"])
+
+export const aiMetadataSchema = z.object({
+  title: z.string().trim().min(3).max(80),
+  summary: z.string().trim().min(1).max(240),
+  category: aiCategorySchema,
+  socialCaption: z.string().trim().min(1).max(280),
+  confidenceNote: z.string().trim().max(240).optional(),
+}).strict()
+
+export type AiMetadata = z.infer<typeof aiMetadataSchema>
+
+export const aiMetadataRequestSchema = z.object({
+  creatorNote: z.string().trim().max(500).optional(),
+}).strict()

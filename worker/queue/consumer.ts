@@ -1,26 +1,34 @@
 import { validateQueueMessage, type QueueMessage } from "./contracts.js"
 import { findWebhookEvent, markWebhookFailed, markWebhookProcessed } from "../repositories/webhook.js"
+import { processNominationEvent } from "../domain/nomination.js"
+import { processCreateClip, processGenerateMetadata, processVerifyClip } from "../domain/jobs.js"
 
-type ConsumerEnv = { DB: D1Database }
+type ConsumerEnv = { DB: D1Database; MOMENTMINT_JOBS: Queue<QueueMessage>; AI?: Ai; AI_MODEL_ID: string; TOKEN_ENCRYPTION_KEY: string; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }
 
-const processEvent = async (db: D1Database, eventId: string) => {
-  const event = await findWebhookEvent(db, eventId)
+const processEvent = async (env: ConsumerEnv, eventId: string) => {
+  const event = await findWebhookEvent(env.DB, eventId)
   if (!event || event.processing_status === "PROCESSED") return
-  // Phase 3 deliberately stops at the durable boundary. Phase 4 consumes this
-  // stored event to apply exact !moment parsing and grouping.
-  await markWebhookProcessed(db, eventId)
+  if (event.message_type === "notification" && event.creator_id && event.payload_json) {
+    const payload = JSON.parse(event.payload_json) as { broadcaster_user_id: string | null; chatter_user_id: string | null; message_id: string | null; message_text: string | null }
+    await processNominationEvent(env, { creatorId: event.creator_id, eventsubTimestamp: event.eventsub_timestamp ?? event.received_at, receivedAt: event.received_at, payload })
+  }
+  await markWebhookProcessed(env.DB, eventId)
 }
 
 export const dispatchQueueMessage = async (message: QueueMessage, env: ConsumerEnv) => {
   const parsed = validateQueueMessage(message)
   switch (parsed.type) {
     case "process_event":
-      await processEvent(env.DB, parsed.eventId)
+      await processEvent(env, parsed.eventId)
       return
     case "create_clip":
+      await processCreateClip(parsed.clipJobId, env)
+      return
     case "verify_clip":
+      await processVerifyClip(parsed.clipJobId, parsed.attempt, env)
+      return
     case "generate_metadata":
-      // These are contractually accepted now; their domain workers land in later phases.
+      await processGenerateMetadata(parsed.momentId, env)
       return
   }
 }
