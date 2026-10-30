@@ -1,0 +1,12 @@
+# Public configuration. Replace placeholders for local development.
+APP_BASE_URL=http://localhost:5173
+TWITCH_CLIENT_ID=replace-with-twitch-client-id
+TWITCH_REDIRECT_URI=http://localhost:5173/oauth/twitch/callback
+AI_MODEL_ID=@cf/openai/gpt-oss-20b
+DEFAULT_GROUP_WINDOW_SECONDS=30
+DEFAULT_UNIQUE_VIEWER_THRESHOLD=2
+
+# Worker secrets. Use `wrangler secret put` for deployed environments.
+TWITCH_CLIENT_SECRET=replace-with-twitch-client-secret
+TOKEN_ENCRYPTION_KEY=replace-with-32-byte-base64-key
+SESSION_SECRET=replace-with-long-random-session-secret

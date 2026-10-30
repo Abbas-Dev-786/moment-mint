@@ -7,10 +7,25 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), cloudflare(), tailwindcss()],
+  plugins: [
+    react(),
+    cloudflare({
+      config: {
+        assets: {
+          run_worker_first: [
+            "/api/*",
+            "/health",
+            "/oauth/*",
+            "/webhooks/twitch",
+          ],
+        },
+      },
+    }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
 })
