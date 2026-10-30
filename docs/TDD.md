@@ -60,7 +60,7 @@ The MVP does not require a standalone Node.js server, a continuously running Web
 - Tailwind CSS v4 using its Vite integration (`@tailwindcss/vite`)
 - shadcn/ui CLI-generated components, not a runtime dependency that hides component source
 - `lucide-react`
-- `react-router-dom` for client-side routes
+- `react-router` for client-side routes
 - `@tanstack/react-query` for data fetching and polling
 - `zod` for shared client/server schemas
 - `sonner` for toast notifications, integrated with shadcn styling
