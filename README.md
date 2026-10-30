@@ -4,9 +4,9 @@ MomentMint turns Twitch viewers' `!moment` nominations into a creator-controlled
 
 ## Current status
 
-Phase 0 is implemented: the repository has a buildable React/Cloudflare Worker shell, a typed environment boundary, a Worker `/health` route, SPA-aware routing, and placeholder Connect, Dashboard, and Settings views.
+Phases 1–3 are implemented: the repository now includes D1 schema/migrations, scoped repositories, ID-only Queue contracts and reconciliation, encrypted Twitch OAuth/session handling, EventSub registration, webhook HMAC/replay protection, notification deduplication, and revocation handling. The UI remains the Phase 0 shell while the moment domain arrives in Phase 4.
 
-Twitch OAuth, D1, EventSub, Queues, Workers AI, and real dashboard data are planned for later phases. See [the master implementation plan](plans/master-plan.md) and [the phase plans](plans/).
+Moment grouping, clips, AI metadata, and live dashboard data remain planned for later phases. See [the master implementation plan](plans/master-plan.md) and [the phase plans](plans/).
 
 ## Local development
 
@@ -24,6 +24,10 @@ pnpm dev
 ```
 
 The Phase 0 health endpoint is available at `/health`. Local values can be copied from `.dev.vars.example` into a local `.dev.vars` file; `.dev.vars` is ignored by Git.
+
+Apply the local D1 migration with `pnpm exec wrangler d1 migrations apply momentmint --local` before exercising authenticated routes. Twitch EventSub requires a public HTTPS callback URL in deployed environments.
+
+For a deployed environment, create the D1 database and queues with `wrangler d1 create momentmint` and `wrangler queues create momentmint-jobs` / `wrangler queues create momentmint-jobs-dlq`, replace the placeholder D1 ID in `wrangler.jsonc`, apply migrations with `wrangler d1 migrations apply momentmint`, then set `TWITCH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `SESSION_SECRET`, and `EVENTSUB_SECRET` with `wrangler secret put`.
 
 ## Verification commands
 

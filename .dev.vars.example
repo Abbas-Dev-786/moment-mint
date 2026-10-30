@@ -10,3 +10,4 @@ DEFAULT_UNIQUE_VIEWER_THRESHOLD=2
 TWITCH_CLIENT_SECRET=replace-with-twitch-client-secret
 TOKEN_ENCRYPTION_KEY=replace-with-32-byte-base64-key
 SESSION_SECRET=replace-with-long-random-session-secret
+EVENTSUB_SECRET=replace-with-random-eventsub-webhook-secret

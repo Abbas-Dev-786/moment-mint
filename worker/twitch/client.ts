@@ -1,0 +1,86 @@
+import { decryptSecret } from "../lib/crypto.js"
+import { encryptSecret } from "../lib/crypto.js"
+import { updateCreatorStatus } from "../repositories/creator.js"
+import type { CreatorRow } from "../repositories/creator.js"
+
+const TWITCH_API = "https://api.twitch.tv/helix"
+const TWITCH_OAUTH = "https://id.twitch.tv/oauth2"
+
+export const requiredScopes = ["user:read:chat", "clips:edit"] as const
+
+export type TwitchTokenValidation = {
+  client_id: string
+  login: string
+  scopes: string[]
+  user_id: string
+  expires_in: number
+}
+
+const twitchResponse = async <T>(response: Response): Promise<T> => {
+  if (!response.ok) throw new Error(`TWITCH_HTTP_${response.status}`)
+  return response.json() as Promise<T>
+}
+
+export const exchangeCode = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TWITCH_REDIRECT_URI: string }, code: string) => {
+  const response = await fetch(`${TWITCH_OAUTH}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, code, grant_type: "authorization_code", redirect_uri: env.TWITCH_REDIRECT_URI }),
+  })
+  return twitchResponse<{ access_token: string; refresh_token: string; expires_in: number; scope: string[] }>(response)
+}
+
+export const validateToken = async (accessToken: string) => {
+  const response = await fetch(`${TWITCH_OAUTH}/validate`, { headers: { Authorization: `OAuth ${accessToken}` } })
+  return twitchResponse<TwitchTokenValidation>(response)
+}
+
+export const revokeToken = async (clientId: string, accessToken: string) => {
+  await fetch(`${TWITCH_OAUTH}/revoke?client_id=${encodeURIComponent(clientId)}&token=${encodeURIComponent(accessToken)}`, { method: "POST" })
+}
+
+const authorizedFetch = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow, path: string, init?: RequestInit) => {
+  const token = await ensureCreatorAccessToken(env.DB, env, creator)
+  const headers = new Headers(init?.headers)
+  headers.set("Client-Id", env.TWITCH_CLIENT_ID)
+  headers.set("Authorization", `Bearer ${token}`)
+  return fetch(`${TWITCH_API}${path}`, { ...init, headers })
+}
+
+const tokenStillValid = (creator: CreatorRow) => creator.token_expires_at && Date.parse(creator.token_expires_at) > Date.now() + 60_000
+
+export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow) => {
+  if (!creator.access_token_ciphertext || !creator.access_token_iv) throw new Error("RECONNECT_REQUIRED")
+  if (tokenStillValid(creator)) return decryptSecret(creator.access_token_ciphertext, creator.access_token_iv, env.TOKEN_ENCRYPTION_KEY)
+  if (!creator.refresh_token_ciphertext || !creator.refresh_token_iv) {
+    await updateCreatorStatus(db, creator.id, "RECONNECT_REQUIRED")
+    throw new Error("RECONNECT_REQUIRED")
+  }
+  try {
+    const refreshToken = await decryptSecret(creator.refresh_token_ciphertext, creator.refresh_token_iv, env.TOKEN_ENCRYPTION_KEY)
+    const response = await fetch(`${TWITCH_OAUTH}/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, grant_type: "refresh_token", refresh_token: refreshToken }) })
+    const token = await twitchResponse<{ access_token: string; refresh_token?: string; expires_in: number }>(response)
+    const access = await encryptSecret(token.access_token, env.TOKEN_ENCRYPTION_KEY)
+    const refresh = token.refresh_token ? await encryptSecret(token.refresh_token, env.TOKEN_ENCRYPTION_KEY) : { ciphertext: creator.refresh_token_ciphertext, iv: creator.refresh_token_iv }
+    await db.prepare("UPDATE creators SET access_token_ciphertext = ?1, access_token_iv = ?2, refresh_token_ciphertext = ?3, refresh_token_iv = ?4, token_expires_at = ?5, connection_status = 'CONNECTED', updated_at = ?6 WHERE id = ?7").bind(access.ciphertext, access.iv, refresh.ciphertext, refresh.iv, new Date(Date.now() + token.expires_in * 1000).toISOString(), new Date().toISOString(), creator.id).run()
+    return token.access_token
+  } catch {
+    await updateCreatorStatus(db, creator.id, "RECONNECT_REQUIRED")
+    throw new Error("RECONNECT_REQUIRED")
+  }
+}
+
+export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string; APP_BASE_URL: string; EVENTSUB_SECRET: string }, creator: CreatorRow) => {
+  const condition = { broadcaster_user_id: creator.twitch_user_id, user_id: creator.twitch_user_id }
+  const response = await authorizedFetch(env, creator, "/eventsub/subscriptions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "channel.chat.message", version: "1", condition, transport: { method: "webhook", callback: `${env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`, secret: env.EVENTSUB_SECRET } }),
+  })
+  return twitchResponse<{ data: [{ id: string; status: string; condition: Record<string, string> }] }>(response)
+}
+
+export const deleteSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: CreatorRow, subscriptionId: string) => {
+  const response = await authorizedFetch(env, creator, `/eventsub/subscriptions?id=${encodeURIComponent(subscriptionId)}`, { method: "DELETE" })
+  if (!response.ok && response.status !== 404) throw new Error(`TWITCH_HTTP_${response.status}`)
+}

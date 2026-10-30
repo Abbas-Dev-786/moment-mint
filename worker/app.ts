@@ -3,9 +3,12 @@ import type { Context, ErrorHandler } from "hono"
 
 import type { ApiError, ApiSuccess } from "../shared/contracts/http.js"
 import type { AppBindings } from "./env.js"
+import { disconnect, logout, me, oauthCallback, oauthStart, requireCreator } from "./oauth.js"
+import { eventSubStatus, registerEventSub, webhook } from "./eventsub.js"
 
-export const app = new Hono<{ Bindings: AppBindings }>()
-type AppContext = Context<{ Bindings: AppBindings }>
+type AppEnv = { Bindings: AppBindings; Variables: { creatorId: string } }
+export const app = new Hono<AppEnv>()
+type AppContext = Context<AppEnv>
 
 app.get("/health", (c: AppContext) => {
   const response: ApiSuccess<{
@@ -21,6 +24,17 @@ app.get("/health", (c: AppContext) => {
   return c.json(response)
 })
 
+app.get("/oauth/twitch/start", oauthStart)
+app.get("/oauth/twitch/callback", oauthCallback)
+app.post("/webhooks/twitch", webhook)
+
+app.use("/api/*", requireCreator)
+app.get("/api/me", me)
+app.post("/api/auth/logout", logout)
+app.post("/api/twitch/disconnect", disconnect)
+app.post("/api/twitch/eventsub", registerEventSub)
+app.get("/api/twitch/eventsub", eventSubStatus)
+
 app.notFound((c: AppContext) => {
   const response: ApiError = {
     error: {
@@ -32,7 +46,7 @@ app.notFound((c: AppContext) => {
   return c.json(response, 404)
 })
 
-const errorHandler: ErrorHandler<{ Bindings: AppBindings }> = (
+const errorHandler: ErrorHandler<AppEnv> = (
   error: Error,
   c: AppContext,
 ) => {

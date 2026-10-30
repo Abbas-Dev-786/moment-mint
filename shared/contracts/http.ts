@@ -3,6 +3,15 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "INTERNAL_ERROR"
   | "CONFIGURATION_ERROR"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "INVALID_SIGNATURE"
+  | "REPLAYED_EVENT"
+  | "OAUTH_DENIED"
+  | "OAUTH_STATE_INVALID"
+  | "MISSING_SCOPE"
+  | "TWITCH_API_ERROR"
+  | "RECONNECT_REQUIRED"
 
 export interface ApiSuccess<T> {
   data: T

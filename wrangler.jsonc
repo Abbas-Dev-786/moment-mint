@@ -13,6 +13,43 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"APP_BASE_URL": "http://localhost:5173",
+		"TWITCH_CLIENT_ID": "replace-with-twitch-client-id",
+		"TWITCH_REDIRECT_URI": "http://localhost:5173/oauth/twitch/callback",
+		"AI_MODEL_ID": "@cf/openai/gpt-oss-20b",
+		"DEFAULT_GROUP_WINDOW_SECONDS": "30",
+		"DEFAULT_UNIQUE_VIEWER_THRESHOLD": "2"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "momentmint",
+			"database_id": "00000000000000000000000000000000",
+			"migrations_dir": "database/migrations"
+		}
+	],
+	"queues": {
+		"producers": [
+			{ "binding": "MOMENTMINT_JOBS", "queue": "momentmint-jobs" }
+		],
+		"consumers": [
+			{
+				"queue": "momentmint-jobs",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 3,
+				"dead_letter_queue": "momentmint-jobs-dlq",
+				"retry_delay": 30
+			}
+		]
+	},
+	"ai": {
+		"binding": "AI"
+	},
+	"triggers": {
+		"crons": ["*/5 * * * *"]
+		},
 	"upload_source_maps": true
 	/**
 	 * Smart Placement

@@ -1,5 +1,8 @@
 import { app } from "./app.js"
 import type { AppBindings } from "./env.js"
+import type { QueueMessage } from "../shared/contracts/domain.js"
+import { consumeQueue } from "./queue/consumer.js"
+import { reconcile } from "./reconcile.js"
 
 const workerOwnedPath = (pathname: string) =>
   pathname === "/health" ||
@@ -26,15 +29,12 @@ export default {
     return response
   },
 
-  async queue(batch) {
-    // Queue processing is intentionally not implemented until Phase 1. If a
-    // queue is provisioned early, retry rather than silently dropping work.
-    batch.retryAll({ delaySeconds: 60 })
+  async queue(batch: MessageBatch<QueueMessage>, env: AppBindings) {
+    await consumeQueue(batch, env)
   },
 
-  async scheduled(controller) {
-    console.info("MomentMint scheduled hook is ready", {
-      scheduledTime: controller.scheduledTime,
-    })
+  async scheduled(controller: ScheduledController, env: AppBindings) {
+    const result = await reconcile(env)
+    console.info("MomentMint reconciliation complete", { scheduledTime: controller.scheduledTime, requeued: result.requeued })
   },
-} satisfies ExportedHandler<AppBindings>
+} satisfies ExportedHandler<AppBindings, QueueMessage>
