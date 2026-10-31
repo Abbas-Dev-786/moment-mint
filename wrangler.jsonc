@@ -13,7 +13,13 @@
 		"run_worker_first": true
 	},
 	"observability": {
-		"enabled": true
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": false
+		}
 	},
 	"keep_vars": true,
 	// These are safe local defaults. Replace the public URL, Twitch client ID,
@@ -35,7 +41,10 @@
 	],
 	"queues": {
 		"producers": [
-			{ "binding": "MOMENTMINT_JOBS", "queue": "momentmint-jobs" }
+			{
+				"binding": "MOMENTMINT_JOBS",
+				"queue": "momentmint-jobs"
+			}
 		],
 		"consumers": [
 			{
@@ -52,8 +61,10 @@
 		"binding": "AI"
 	},
 	"triggers": {
-		"crons": ["*/5 * * * *"]
-		},
+		"crons": [
+			"*/5 * * * *"
+		]
+	},
 	"upload_source_maps": true
 	/**
 	 * Smart Placement
