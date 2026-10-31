@@ -6,7 +6,7 @@ import { findCreatorById, findCreatorByTwitchId } from "./repositories/creator.j
 import { findSubscriptionByTwitchId, saveSubscription, updateSubscriptionStatus } from "./repositories/eventsub.js"
 import { insertWebhookEvent, markWebhookQueued } from "./repositories/webhook.js"
 import { sendQueueMessage } from "./queue/contracts.js"
-import { listChatSubscriptions, registerChatSubscription, requiredScopes, TwitchApiError } from "./twitch/client.js"
+import { deleteSubscription, listChatSubscriptions, registerChatSubscription, requiredScopes, TwitchApiError } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
 
 const replayWindowMs = 10 * 60_000
