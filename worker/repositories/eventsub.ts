@@ -26,7 +26,7 @@ export const saveSubscription = (db: D1Database, input: { creatorId: string; twi
   const timestamp = nowIso()
   return db.prepare(`INSERT INTO eventsub_subscriptions (id, creator_id, twitch_subscription_id, subscription_type, status, condition_json, reason, created_at, updated_at)
     VALUES (?1, ?2, ?3, 'channel.chat.message', ?4, ?5, ?6, ?7, ?7)
-    ON CONFLICT(twitch_subscription_id) DO UPDATE SET creator_id=excluded.creator_id, status=excluded.status, condition_json=excluded.condition_json, reason=excluded.reason, updated_at=excluded.updated_at`)
+    ON CONFLICT(twitch_subscription_id) DO UPDATE SET creator_id=excluded.creator_id, status=CASE WHEN eventsub_subscriptions.status = 'enabled' AND excluded.status = 'webhook_callback_verification_pending' THEN 'enabled' ELSE excluded.status END, condition_json=excluded.condition_json, reason=excluded.reason, updated_at=excluded.updated_at`)
     .bind(newId("sub"), input.creatorId, input.twitchId, internalSubscriptionStatus(input.status), JSON.stringify(input.condition), input.reason ?? null, timestamp).run()
 }
 
