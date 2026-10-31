@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS action_rate_limits (
+  creator_id TEXT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  window_started_at TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (creator_id, action)
+);
+
 CREATE TABLE IF NOT EXISTS oauth_states (
   id TEXT PRIMARY KEY,
   state_hash TEXT NOT NULL UNIQUE,
@@ -146,3 +154,4 @@ CREATE INDEX IF NOT EXISTS idx_nominations_moment ON nominations(moment_id);
 CREATE INDEX IF NOT EXISTS idx_clip_jobs_moment_status ON clip_jobs(moment_id, status);
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expiry ON oauth_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_action_rate_limits_window ON action_rate_limits(window_started_at);

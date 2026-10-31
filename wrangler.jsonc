@@ -13,6 +13,8 @@
 	"observability": {
 		"enabled": true
 	},
+	// These are safe local defaults. Replace the public URL, Twitch client ID,
+	// and callback with production values before running deploy:production.
 	"vars": {
 		"APP_BASE_URL": "http://localhost:5173",
 		"TWITCH_CLIENT_ID": "replace-with-twitch-client-id",
@@ -25,6 +27,7 @@
 		{
 			"binding": "DB",
 			"database_name": "momentmint",
+			// Replace this local placeholder with the ID returned by `wrangler d1 create`.
 			"database_id": "00000000000000000000000000000000",
 			"migrations_dir": "database/migrations"
 		}

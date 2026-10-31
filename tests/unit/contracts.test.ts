@@ -5,6 +5,7 @@ import { decryptSecret, encryptSecret, hmacSha256Hex } from "../../worker/lib/cr
 import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/nomination.js"
 import { buildMetadataPrompt, fallbackMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
 import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
+import { isTrustedTwitchUrl } from "../../worker/twitch/client.js"
 
 describe("MomentMint contracts", () => {
   it("accepts only ID-based queue messages", () => {
@@ -51,5 +52,12 @@ describe("MomentMint contracts", () => {
     expect(parseMetadataOutput({ response: '{"title":"invented","summary":"bad","category":"not-real","socialCaption":"x"}' })).toBeNull()
     expect(buildMetadataPrompt({ approximateTimestamp: "2026-10-30T00:00:00Z", distinctNominatorCount: 2 })).toContain("NOT watched the video")
     expect(fallbackMetadata({ anchor_eventsub_at: "2026-10-30T00:00:00Z", unique_nominator_count: 2 }).summary).toContain("2 distinct viewers")
+  })
+
+  it("allows only HTTPS Twitch-hosted clip URLs", () => {
+    expect(isTrustedTwitchUrl("https://clips.twitch.tv/example")).toBe(true)
+    expect(isTrustedTwitchUrl("https://clips-media-assets2.twitch.tv/example.jpg")).toBe(true)
+    expect(isTrustedTwitchUrl("http://clips.twitch.tv/example")).toBe(false)
+    expect(isTrustedTwitchUrl("https://evil-twitch.tv/example")).toBe(false)
   })
 })

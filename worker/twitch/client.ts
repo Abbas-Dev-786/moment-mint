@@ -6,6 +6,15 @@ import type { CreatorRow } from "../repositories/creator.js"
 const TWITCH_API = "https://api.twitch.tv/helix"
 const TWITCH_OAUTH = "https://id.twitch.tv/oauth2"
 
+export const isTrustedTwitchUrl = (value: string) => {
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && (url.hostname === "twitch.tv" || url.hostname.endsWith(".twitch.tv"))
+  } catch {
+    return false
+  }
+}
+
 export const requiredScopes = ["user:read:chat", "clips:edit"] as const
 
 export class TwitchApiError extends Error {
@@ -125,12 +134,16 @@ export const createClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string
   const response = await authorizedFetch(env, creator, `/clips?broadcaster_id=${encodeURIComponent(creator.twitch_user_id)}`, { method: "POST" })
   const body = await twitchResponse<{ data?: [{ id?: string; edit_url?: string }] }>(response)
   const created = body.data?.[0]
-  if (!created?.id || !created.edit_url) throw new TwitchApiError(200, "TWITCH_MALFORMED_CLIP_RESPONSE", false)
+  if (!created?.id || !created.edit_url || !isTrustedTwitchUrl(created.edit_url)) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false)
   return { id: created.id, editUrl: created.edit_url }
 }
 
 export const getClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, clipId: string) => {
   const response = await authorizedFetch(env, creator, `/clips?id=${encodeURIComponent(clipId)}`, { method: "GET" })
   const body = await twitchResponse<{ data?: TwitchClipRecord[] }>(response)
-  return body.data?.[0] ?? null
+  const clip = body.data?.[0] ?? null
+  if (clip && (!isTrustedTwitchUrl(clip.url) || !isTrustedTwitchUrl(clip.embed_url) || !isTrustedTwitchUrl(clip.thumbnail_url))) {
+    throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false)
+  }
+  return clip
 }

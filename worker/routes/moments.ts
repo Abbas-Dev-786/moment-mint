@@ -10,6 +10,8 @@ import { fallbackMetadata } from "../ai/metadata.js"
 import { sendQueueMessage } from "../queue/contracts.js"
 import { upsertMetadataForCreator } from "../repositories/metadata.js"
 import { decryptSecret } from "../lib/crypto.js"
+import { consumeRateLimit } from "../repositories/rate-limit.js"
+import { isTrustedTwitchUrl } from "../twitch/client.js"
 
 const clipRequestSchema = z.object({ confirm: z.literal(true) }).strict()
 const reviewSchema = z.object({ status: z.enum(["REVIEWED", "DISMISSED"]) }).strict()
@@ -61,6 +63,9 @@ export const requestClip = async (c: AuthContext) => {
   let body: unknown
   try { body = await c.req.json() } catch { body = null }
   if (!clipRequestSchema.safeParse(body).success) return c.json({ error: { code: "BAD_REQUEST", message: "Clip creation requires explicit confirmation." } }, 400)
+  if (!await consumeRateLimit(c.env.DB, c.get("creatorId"), "request_clip", 5)) {
+    return c.json({ error: { code: "RATE_LIMITED", message: "Clip requests are temporarily limited. Try again shortly." } }, 429)
+  }
   const result = await enqueueClip(c, momentId)
   return c.json({ data: { clipJob: result.job, queued: result.created } }, result.created ? 202 : 200)
 }
@@ -69,6 +74,9 @@ export const retryClip = async (c: AuthContext) => {
   const job = await findClipJobForCreator(c.env.DB, c.get("creatorId"), routeParam(c, "clipJobId"))
   if (!job) return c.json({ error: { code: "NOT_FOUND", message: "Clip job was not found." } }, 404)
   if (!["FAILED", "RETRYABLE_FAILED", "MANUAL_REVIEW"].includes(job.status)) return c.json({ error: { code: "BAD_REQUEST", message: "This clip job is not eligible for retry." } }, 400)
+  if (!await consumeRateLimit(c.env.DB, c.get("creatorId"), "request_clip", 5)) {
+    return c.json({ error: { code: "RATE_LIMITED", message: "Clip requests are temporarily limited. Try again shortly." } }, 429)
+  }
   const result = await enqueueClip(c, job.moment_id)
   return c.json({ data: { clipJob: result.job, queued: result.created } }, result.created ? 202 : 200)
 }
@@ -104,6 +112,7 @@ export const getClipEditUrl = async (c: AuthContext) => {
   if (!job.edit_url_ciphertext || !job.edit_url_iv) return c.json({ error: { code: "NOT_FOUND", message: "Twitch has not returned an edit URL for this clip." } }, 404)
   try {
     const editUrl = await decryptSecret(job.edit_url_ciphertext, job.edit_url_iv, c.env.TOKEN_ENCRYPTION_KEY)
+    if (!isTrustedTwitchUrl(editUrl)) return c.json({ error: { code: "INTERNAL_ERROR", message: "The clip edit URL is invalid." } }, 500)
     return c.json({ data: { editUrl } })
   } catch {
     return c.json({ error: { code: "INTERNAL_ERROR", message: "The clip edit URL could not be opened." } }, 500)
@@ -120,6 +129,9 @@ export const requestMetadata = async (c: AuthContext) => {
   if (!parsed.success) return c.json({ error: { code: "BAD_REQUEST", message: "Creator note is invalid." } }, 400)
   const existing = await findMetadataForCreator(c.env.DB, creatorId, moment.id)
   if (existing?.status === "PENDING") return c.json({ data: { metadata: existing, queued: false } }, 202)
+  if (!await consumeRateLimit(c.env.DB, creatorId, "request_metadata", 3)) {
+    return c.json({ error: { code: "RATE_LIMITED", message: "Metadata generation is temporarily limited. Try again shortly." } }, 429)
+  }
   const fallback = fallbackMetadata(moment)
   await upsertMetadataForCreator(c.env.DB, { creatorId, momentId: moment.id, modelId: c.env.AI_MODEL_ID, status: "PENDING", ...fallback, promptVersion: "metadata-v1", creatorNote: parsed.data.creatorNote ?? null, generatedAt: null })
   try {

@@ -15,6 +15,7 @@ export default defineConfig({
           run_worker_first: [
             "/api/*",
             "/health",
+            "/health/ready",
             "/oauth/*",
             "/webhooks/twitch",
           ],

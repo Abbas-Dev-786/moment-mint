@@ -12,3 +12,16 @@ it("serves the Worker health contract", async () => {
     },
   })
 })
+
+it("serves the database readiness contract", async () => {
+  const response = await SELF.fetch("https://momentmint.test/health/ready")
+
+  expect(response.status).toBe(200)
+  await expect(response.json()).resolves.toMatchObject({
+    data: {
+      service: "momentmint-worker",
+      status: "ready",
+      checks: { database: "ok", configuration: "ok" },
+    },
+  })
+})
