@@ -81,6 +81,19 @@ const authorizedFetch = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; 
   }
 }
 
+const appAuthorizedFetch = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }, path: string, init?: RequestInit) => {
+  const tokenResponse = await fetch(`${TWITCH_OAUTH}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, grant_type: "client_credentials" }),
+  })
+  const token = await twitchResponse<{ access_token: string }>(tokenResponse)
+  const headers = new Headers(init?.headers)
+  headers.set("Client-Id", env.TWITCH_CLIENT_ID)
+  headers.set("Authorization", `Bearer ${token.access_token}`)
+  return fetch(`${TWITCH_API}${path}`, { ...init, headers })
+}
+
 const tokenStillValid = (creator: TwitchCreator) => Boolean(creator.token_expires_at && Date.parse(creator.token_expires_at) > Date.now() + 60_000)
 
 export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator) => {
@@ -106,7 +119,7 @@ export const ensureCreatorAccessToken = async (db: D1Database, env: { TWITCH_CLI
 
 export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string; APP_BASE_URL: string; EVENTSUB_SECRET: string }, creator: TwitchCreator) => {
   const condition = { broadcaster_user_id: creator.twitch_user_id, user_id: creator.twitch_user_id }
-  const response = await authorizedFetch(env, creator, "/eventsub/subscriptions", {
+  const response = await appAuthorizedFetch(env, "/eventsub/subscriptions", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ type: "channel.chat.message", version: "1", condition, transport: { method: "webhook", callback: `${env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`, secret: env.EVENTSUB_SECRET } }),
@@ -114,8 +127,21 @@ export const registerChatSubscription = async (env: { DB: D1Database; TWITCH_CLI
   return twitchResponse<{ data: [{ id: string; status: string; condition: Record<string, string> }] }>(response)
 }
 
-export const deleteSubscription = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, subscriptionId: string) => {
-  const response = await authorizedFetch(env, creator, `/eventsub/subscriptions?id=${encodeURIComponent(subscriptionId)}`, { method: "DELETE" })
+export type TwitchEventSubSubscription = {
+  id: string
+  status: string
+  type: string
+  condition: Record<string, string>
+  transport?: { method?: string; callback?: string }
+}
+
+export const listChatSubscriptions = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }, broadcasterId: string) => {
+  const response = await appAuthorizedFetch(env, `/eventsub/subscriptions?type=channel.chat.message&user_id=${encodeURIComponent(broadcasterId)}`)
+  return twitchResponse<{ data: TwitchEventSubSubscription[] }>(response)
+}
+
+export const deleteSubscription = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }, subscriptionId: string) => {
+  const response = await appAuthorizedFetch(env, `/eventsub/subscriptions?id=${encodeURIComponent(subscriptionId)}`, { method: "DELETE" })
   if (!response.ok && response.status !== 404) throw new Error(`TWITCH_HTTP_${response.status}`)
 }
 

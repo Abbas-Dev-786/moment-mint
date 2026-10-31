@@ -26,7 +26,7 @@ export const eventSubConditionSchema = z.object({
 export const eventSubPayloadSchema = z.object({
   subscription: z.object({
     id: z.string(),
-    type: z.string(),
+    type: z.literal("channel.chat.message"),
     status: z.string(),
     condition: eventSubConditionSchema,
   }),
@@ -43,7 +43,7 @@ export type SafeEventType = "notification" | "revocation" | "verification"
 
 export const errorCodes = [
   "BAD_REQUEST", "NOT_FOUND", "INTERNAL_ERROR", "CONFIGURATION_ERROR", "UNAUTHORIZED",
-  "FORBIDDEN", "INVALID_SIGNATURE", "REPLAYED_EVENT", "OAUTH_DENIED", "OAUTH_STATE_INVALID",
+  "FORBIDDEN", "RATE_LIMITED", "INVALID_SIGNATURE", "REPLAYED_EVENT", "OAUTH_DENIED", "OAUTH_STATE_INVALID",
   "MISSING_SCOPE", "TWITCH_API_ERROR", "RECONNECT_REQUIRED",
 ] as const
 

@@ -1,7 +1,7 @@
 import type { Context } from "hono"
 import { creatorSettings } from "./repositories/creator.js"
 import { consumeOAuthState, createOAuthState, createSession, deleteSession, findSessionCreatorId } from "./repositories/auth.js"
-import { findCreatorById, upsertCreator, updateCreatorStatus } from "./repositories/creator.js"
+import { findCreatorById, upsertCreator } from "./repositories/creator.js"
 import { disableCreatorSubscriptions, findSubscriptionForCreator } from "./repositories/eventsub.js"
 import { deleteSubscription, exchangeCode, revokeToken, requiredScopes, validateToken } from "./twitch/client.js"
 import { constantTimeEqual, decryptSecret, encryptSecret, sha256Base64, signValue } from "./lib/crypto.js"
@@ -52,10 +52,10 @@ export const oauthCallback = async (c: AuthContext) => {
   const query = new URL(c.req.url).searchParams
   const state = query.get("state")
   if (!state) return c.json({ error: { code: "OAUTH_STATE_INVALID", message: "The OAuth state is missing or expired." } }, 400)
-  const consumed = await consumeOAuthState(c.env.DB, await sha256Base64(state))
-  if (!consumed) return c.json({ error: { code: "OAUTH_STATE_INVALID", message: "The OAuth state is invalid or expired." } }, 400)
   const flowId = parseCookies(c.req.header("cookie") ?? null)[OAUTH_FLOW_COOKIE]
-  if (!flowId || consumed.session_id !== flowId) return c.json({ error: { code: "OAUTH_STATE_INVALID", message: "The OAuth flow does not match this browser session." } }, 400)
+  if (!flowId) return c.json({ error: { code: "OAUTH_STATE_INVALID", message: "The OAuth flow does not match this browser session." } }, 400)
+  const consumed = await consumeOAuthState(c.env.DB, await sha256Base64(state), flowId)
+  if (!consumed) return c.json({ error: { code: "OAUTH_STATE_INVALID", message: "The OAuth state is invalid or expired." } }, 400)
   if (query.get("error")) return c.json({ error: { code: "OAUTH_DENIED", message: "Twitch authorization was cancelled." } }, 400)
   const code = query.get("code")
   if (!code || !configured(c.env)) return c.json({ error: { code: "BAD_REQUEST", message: "The OAuth callback is incomplete." } }, 400)
@@ -101,7 +101,7 @@ export const disconnect = async (c: AuthContext) => {
   if (!creator) return c.json({ error: { code: "NOT_FOUND", message: "Creator was not found." } }, 404)
   const subscription = await findSubscriptionForCreator(c.env.DB, creatorId)
   try {
-    if (subscription?.twitch_subscription_id) await deleteSubscription(c.env, creator, subscription.twitch_subscription_id)
+    if (subscription?.twitch_subscription_id) await deleteSubscription(c.env, subscription.twitch_subscription_id)
     if (creator.access_token_ciphertext && creator.access_token_iv) {
       await revokeToken(c.env.TWITCH_CLIENT_ID, await decryptSecret(creator.access_token_ciphertext, creator.access_token_iv, c.env.TOKEN_ENCRYPTION_KEY))
     }
@@ -109,7 +109,7 @@ export const disconnect = async (c: AuthContext) => {
     console.error("Twitch disconnect cleanup failed", { creatorId, error: error instanceof Error ? error.message : "unknown" })
   }
   await disableCreatorSubscriptions(c.env.DB, creatorId)
-  await updateCreatorStatus(c.env.DB, creatorId, "DISCONNECTED")
+  await c.env.DB.prepare("UPDATE creators SET access_token_ciphertext = NULL, access_token_iv = NULL, refresh_token_ciphertext = NULL, refresh_token_iv = NULL, token_expires_at = NULL, scopes_json = '[]', connection_status = 'DISCONNECTED', updated_at = ?1 WHERE id = ?2").bind(new Date().toISOString(), creatorId).run()
   const value = parseCookies(c.req.header("cookie") ?? null)[SESSION_COOKIE]
   if (value) await deleteSession(c.env.DB, value.split(".")[0])
   const response = c.json({ data: { disconnected: true } })

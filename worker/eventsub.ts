@@ -6,7 +6,7 @@ import { findCreatorById, findCreatorByTwitchId } from "./repositories/creator.j
 import { findSubscriptionByTwitchId, saveSubscription, updateSubscriptionStatus } from "./repositories/eventsub.js"
 import { insertWebhookEvent, markWebhookQueued } from "./repositories/webhook.js"
 import { sendQueueMessage } from "./queue/contracts.js"
-import { registerChatSubscription } from "./twitch/client.js"
+import { listChatSubscriptions, registerChatSubscription } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
 
 const replayWindowMs = 10 * 60_000
@@ -25,7 +25,10 @@ const safeEventPayload = (event: Record<string, unknown>) => {
 
 const eventSubContext = async (c: Context<{ Bindings: AuthContext["env"] }>, payload: { subscription: { id: string; condition: { broadcaster_user_id: string } } }) => {
   const stored = await findSubscriptionByTwitchId(c.env.DB, payload.subscription.id)
-  if (stored) return stored.creator_id
+  if (stored) {
+    const creator = await findCreatorById(c.env.DB, stored.creator_id)
+    return creator?.twitch_user_id === payload.subscription.condition.broadcaster_user_id ? creator.id : null
+  }
   const creator = await findCreatorByTwitchId(c.env.DB, payload.subscription.condition.broadcaster_user_id)
   return creator?.id ?? null
 }
@@ -86,7 +89,12 @@ export const registerEventSub = async (c: AuthContext) => {
   const creator = await findCreatorById(c.env.DB, c.get("creatorId"))
   if (!creator) return c.json({ error: { code: "NOT_FOUND", message: "Creator was not found." } }, 404)
   try {
-    const result = await registerChatSubscription({ ...c.env, EVENTSUB_SECRET: eventSubSecret }, creator)
+    const existing = await listChatSubscriptions(c.env, creator.twitch_user_id)
+    const callback = `${c.env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`
+    const matching = existing.data.find((subscription) => subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && ["enabled", "webhook_callback_verification_pending"].includes(subscription.status))
+    const result = matching
+      ? { data: [{ id: matching.id, status: matching.status, condition: matching.condition }] }
+      : await registerChatSubscription({ ...c.env, EVENTSUB_SECRET: eventSubSecret }, creator)
     const subscription = result.data[0]
     await saveSubscription(c.env.DB, { creatorId: creator.id, twitchId: subscription.id, status: subscription.status, condition: subscription.condition })
     return c.json({ data: { id: subscription.id, status: subscription.status, type: "channel.chat.message" } })

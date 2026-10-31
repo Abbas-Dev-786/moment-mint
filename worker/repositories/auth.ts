@@ -6,9 +6,11 @@ export const createOAuthState = async (db: D1Database, stateHash: string, expire
   return id
 }
 
-export const consumeOAuthState = async (db: D1Database, stateHash: string) => {
+export const consumeOAuthState = async (db: D1Database, stateHash: string, flowId?: string) => {
   const now = nowIso()
-  const result = await db.prepare("UPDATE oauth_states SET used_at = ?1 WHERE state_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING id, session_id").bind(now, stateHash).first<{ id: string; session_id: string | null }>()
+  const result = flowId
+    ? await db.prepare("UPDATE oauth_states SET used_at = ?1 WHERE state_hash = ?2 AND session_id = ?3 AND used_at IS NULL AND expires_at > ?1 RETURNING id, session_id").bind(now, stateHash, flowId).first<{ id: string; session_id: string | null }>()
+    : await db.prepare("UPDATE oauth_states SET used_at = ?1 WHERE state_hash = ?2 AND used_at IS NULL AND expires_at > ?1 RETURNING id, session_id").bind(now, stateHash).first<{ id: string; session_id: string | null }>()
   return result
 }
 

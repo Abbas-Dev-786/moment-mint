@@ -155,3 +155,4 @@ CREATE INDEX IF NOT EXISTS idx_clip_jobs_moment_status ON clip_jobs(moment_id, s
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expiry ON oauth_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_action_rate_limits_window ON action_rate_limits(window_started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_sessions_current_creator ON stream_sessions(creator_id) WHERE ended_at IS NULL AND status IN ('LIVE','UNKNOWN');

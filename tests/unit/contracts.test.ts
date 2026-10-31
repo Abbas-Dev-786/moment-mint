@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { creatorSettingsSchema, queueMessageSchema } from "../../shared/contracts/domain.js"
+import { creatorSettingsSchema, eventSubPayloadSchema, queueMessageSchema } from "../../shared/contracts/domain.js"
 import { decryptSecret, encryptSecret, hmacSha256Hex } from "../../worker/lib/crypto.js"
 import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/nomination.js"
 import { buildMetadataPrompt, fallbackMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
 import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
 import { isTrustedTwitchUrl } from "../../worker/twitch/client.js"
+import { parseCookies } from "../../worker/lib/cookies.js"
 
 describe("MomentMint contracts", () => {
   it("accepts only ID-based queue messages", () => {
@@ -59,5 +60,15 @@ describe("MomentMint contracts", () => {
     expect(isTrustedTwitchUrl("https://clips-media-assets2.twitch.tv/example.jpg")).toBe(true)
     expect(isTrustedTwitchUrl("http://clips.twitch.tv/example")).toBe(false)
     expect(isTrustedTwitchUrl("https://evil-twitch.tv/example")).toBe(false)
+  })
+
+  it("accepts only channel chat EventSub payloads and tolerates malformed cookies", () => {
+    const payload = {
+      subscription: { id: "sub_1", type: "channel.chat.message", status: "enabled", condition: { broadcaster_user_id: "broadcaster_1", user_id: "broadcaster_1" } },
+      event: {},
+    }
+    expect(eventSubPayloadSchema.parse(payload).subscription.type).toBe("channel.chat.message")
+    expect(() => eventSubPayloadSchema.parse({ ...payload, subscription: { ...payload.subscription, type: "channel.follow" } })).toThrow()
+    expect(parseCookies("mm_session=valid%20value; malformed=%E0%A4%A; other=ok")).toEqual({ mm_session: "valid value", other: "ok" })
   })
 })

@@ -5,7 +5,15 @@ export const parseCookies = (header: string | null) => {
   const cookies: Record<string, string> = {}
   for (const part of header?.split(";") ?? []) {
     const separator = part.indexOf("=")
-    if (separator > 0) cookies[part.slice(0, separator).trim()] = decodeURIComponent(part.slice(separator + 1).trim())
+    if (separator > 0) {
+      const key = part.slice(0, separator).trim()
+      const value = part.slice(separator + 1).trim()
+      try {
+        cookies[key] = decodeURIComponent(value)
+      } catch {
+        // Ignore malformed cookies rather than failing the whole request.
+      }
+    }
   }
   return cookies
 }

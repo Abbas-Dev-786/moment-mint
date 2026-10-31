@@ -19,6 +19,6 @@ export const findOrCreateStreamSession = async (db: D1Database, creatorId: strin
   const current = await findCurrentStreamSession(db, creatorId)
   if (current) return current
   const id = newId("stream")
-  await db.prepare("INSERT INTO stream_sessions (id, creator_id, started_at, status, created_at) VALUES (?1, ?2, ?3, 'UNKNOWN', ?4)").bind(id, creatorId, startedAt, nowIso()).run()
-  return db.prepare("SELECT * FROM stream_sessions WHERE id = ?1").bind(id).first<StreamSessionRow>()
+  await db.prepare("INSERT OR IGNORE INTO stream_sessions (id, creator_id, started_at, status, created_at) VALUES (?1, ?2, ?3, 'UNKNOWN', ?4)").bind(id, creatorId, startedAt, nowIso()).run()
+  return findCurrentStreamSession(db, creatorId)
 }
