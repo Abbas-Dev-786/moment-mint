@@ -77,6 +77,17 @@ The repository does not create or select Cloudflare resources automatically. Com
 
    Then sign in through Twitch, register EventSub from Settings, send a real `!moment`, and verify the resulting clip through the creator review flow. Do not claim live readiness until these checks pass against the intended account and hostname.
 
+### Cloudflare Workers Builds
+
+For a repository-connected Worker build, use the repository root as the root directory and `pnpm run build` as the build command. Cloudflare installs dependencies automatically; do not replace the install step with a custom command. The checked-in `pnpm-workspace.yaml` explicitly includes the root package so Cloudflare's pnpm 9 runtime can install it with `--frozen-lockfile`.
+
+Configure these production values in the Worker environment before the first live deployment:
+
+- Variables: `APP_BASE_URL`, `TWITCH_CLIENT_ID`, `TWITCH_REDIRECT_URI`, `AI_MODEL_ID`, `DEFAULT_GROUP_WINDOW_SECONDS`, `DEFAULT_UNIQUE_VIEWER_THRESHOLD`.
+- Secrets: `TWITCH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `SESSION_SECRET`, `EVENTSUB_SECRET`.
+
+Never commit or paste `TWITCH_CLIENT_SECRET` into the repository. Add the exact callback `APP_BASE_URL/oauth/twitch/callback` to the Twitch developer application.
+
 ## Verification commands
 
 ```sh
