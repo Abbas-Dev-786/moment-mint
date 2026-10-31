@@ -15,7 +15,10 @@ export const isTrustedTwitchUrl = (value: string) => {
   }
 }
 
-export const requiredScopes = ["user:read:chat", "clips:edit"] as const
+// Webhook EventSub subscriptions are created with an app access token. For
+// channel.chat.message, Twitch also requires the chatting user's bot scope and
+// the broadcaster's bot scope in addition to chat-read permission.
+export const requiredScopes = ["user:read:chat", "user:bot", "channel:bot", "clips:edit"] as const
 
 export class TwitchApiError extends Error {
   readonly status: number

@@ -6,7 +6,7 @@ import { findCreatorById, findCreatorByTwitchId } from "./repositories/creator.j
 import { findSubscriptionByTwitchId, saveSubscription, updateSubscriptionStatus } from "./repositories/eventsub.js"
 import { insertWebhookEvent, markWebhookQueued } from "./repositories/webhook.js"
 import { sendQueueMessage } from "./queue/contracts.js"
-import { listChatSubscriptions, registerChatSubscription, TwitchApiError } from "./twitch/client.js"
+import { listChatSubscriptions, registerChatSubscription, requiredScopes, TwitchApiError } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
 
 const replayWindowMs = 10 * 60_000
@@ -88,6 +88,15 @@ export const registerEventSub = async (c: AuthContext) => {
   if (!eventSubSecret) return c.json({ error: { code: "CONFIGURATION_ERROR", message: "EventSub secret is not configured." } }, 503)
   const creator = await findCreatorById(c.env.DB, c.get("creatorId"))
   if (!creator) return c.json({ error: { code: "NOT_FOUND", message: "Creator was not found." } }, 404)
+  let grantedScopes: string[] = []
+  try {
+    grantedScopes = JSON.parse(creator.scopes_json) as string[]
+  } catch {
+    grantedScopes = []
+  }
+  if (!requiredScopes.every((scope) => grantedScopes.includes(scope))) {
+    return c.json({ error: { code: "RECONNECT_REQUIRED", message: "Reconnect Twitch and approve the chat bot permissions before registering EventSub." } }, 401)
+  }
   try {
     const existing = await listChatSubscriptions(c.env, creator.twitch_user_id)
     const callback = `${c.env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`
@@ -103,7 +112,7 @@ export const registerEventSub = async (c: AuthContext) => {
     console.error("EventSub registration failed", { creatorId: creator.id, status: apiError?.status ?? 0, code: apiError?.code ?? (error instanceof Error ? error.message : "unknown") })
     if (apiError?.code === "RECONNECT_REQUIRED") return c.json({ error: { code: "RECONNECT_REQUIRED", message: "Reconnect Twitch to refresh the authorization required for EventSub." } }, 401)
     if (apiError?.code === "TWITCH_RATE_LIMITED") return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch is rate-limiting EventSub changes. Wait briefly and try again." } }, 429)
-    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch rejected EventSub registration. Check the Twitch client credentials, HTTPS callback URL, and granted user:read:chat scope." } }, 502)
+    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch rejected EventSub registration. Reconnect Twitch to refresh chat permissions, then try again." } }, 502)
   }
 }
 
