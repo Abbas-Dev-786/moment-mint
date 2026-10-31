@@ -109,10 +109,11 @@ export const registerEventSub = async (c: AuthContext) => {
     return c.json({ data: { id: subscription.id, status: subscription.status, type: "channel.chat.message" } })
   } catch (error) {
     const apiError = error instanceof TwitchApiError ? error : null
-    console.error("EventSub registration failed", { creatorId: creator.id, status: apiError?.status ?? 0, code: apiError?.code ?? (error instanceof Error ? error.message : "unknown") })
+    console.error("EventSub registration failed", { creatorId: creator.id, status: apiError?.status ?? 0, code: apiError?.code ?? (error instanceof Error ? error.message : "unknown"), upstreamMessage: apiError?.upstreamMessage ?? null })
     if (apiError?.code === "RECONNECT_REQUIRED") return c.json({ error: { code: "RECONNECT_REQUIRED", message: "Reconnect Twitch to refresh the authorization required for EventSub." } }, 401)
     if (apiError?.code === "TWITCH_RATE_LIMITED") return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch is rate-limiting EventSub changes. Wait briefly and try again." } }, 429)
-    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch rejected EventSub registration. Reconnect Twitch to refresh chat permissions, then try again." } }, 502)
+    const detail = apiError?.upstreamMessage?.replace(/[\r\n]+/g, " ").trim()
+    return c.json({ error: { code: "TWITCH_API_ERROR", message: detail ? `Twitch rejected EventSub registration: ${detail}` : "Twitch rejected EventSub registration. Reconnect Twitch to refresh chat permissions, then try again." } }, 502)
   }
 }
 

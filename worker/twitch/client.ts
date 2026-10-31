@@ -24,12 +24,14 @@ export class TwitchApiError extends Error {
   readonly status: number
   readonly code: string
   readonly retryable: boolean
+  readonly upstreamMessage: string | null
 
-  constructor(status: number, code: string, retryable: boolean) {
+  constructor(status: number, code: string, retryable: boolean, upstreamMessage: string | null = null) {
     super(code)
     this.status = status
     this.code = code
     this.retryable = retryable
+    this.upstreamMessage = upstreamMessage
   }
 }
 
@@ -45,7 +47,14 @@ type TwitchCreator = Pick<CreatorRow, "id" | "twitch_user_id" | "access_token_ci
 
 const twitchResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {
-    throw new TwitchApiError(response.status, response.status === 401 || response.status === 403 ? "RECONNECT_REQUIRED" : response.status === 429 ? "TWITCH_RATE_LIMITED" : response.status >= 500 ? "TWITCH_UNAVAILABLE" : "TWITCH_API_ERROR", response.status === 429 || response.status >= 500)
+    let upstreamMessage: string | null = null
+    try {
+      const body = await response.clone().json() as { message?: unknown }
+      if (typeof body.message === "string") upstreamMessage = body.message.slice(0, 300)
+    } catch {
+      // Keep the API response generic when Twitch does not return JSON.
+    }
+    throw new TwitchApiError(response.status, response.status === 401 || response.status === 403 ? "RECONNECT_REQUIRED" : response.status === 429 ? "TWITCH_RATE_LIMITED" : response.status >= 500 ? "TWITCH_UNAVAILABLE" : "TWITCH_API_ERROR", response.status === 429 || response.status >= 500, upstreamMessage)
   }
   return response.json() as Promise<T>
 }
