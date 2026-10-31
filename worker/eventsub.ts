@@ -100,7 +100,7 @@ export const registerEventSub = async (c: AuthContext) => {
   try {
     const existing = await listChatSubscriptions(c.env, creator.twitch_user_id)
     const callback = `${c.env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`
-    const matching = existing.data.find((subscription) => subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && ["enabled", "webhook_callback_verification_pending"].includes(subscription.status))
+    const matching = existing.data.find((subscription) => subscription.type === "channel.chat.message" && subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && ["enabled", "webhook_callback_verification_pending"].includes(subscription.status))
     const result = matching
       ? { data: [{ id: matching.id, status: matching.status, condition: matching.condition }] }
       : await registerChatSubscription({ ...c.env, EVENTSUB_SECRET: eventSubSecret }, creator)

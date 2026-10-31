@@ -148,7 +148,9 @@ export type TwitchEventSubSubscription = {
 }
 
 export const listChatSubscriptions = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }, broadcasterId: string) => {
-  const response = await appAuthorizedFetch(env, `/eventsub/subscriptions?type=channel.chat.message&user_id=${encodeURIComponent(broadcasterId)}`)
+  // Twitch allows only one filter on this endpoint. Use user_id here and
+  // filter the subscription type at the call site.
+  const response = await appAuthorizedFetch(env, `/eventsub/subscriptions?user_id=${encodeURIComponent(broadcasterId)}`)
   return twitchResponse<{ data: TwitchEventSubSubscription[] }>(response)
 }
 
