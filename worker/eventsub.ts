@@ -62,6 +62,7 @@ export const webhook = async (c: Context<{ Bindings: AuthContext["env"] }>) => {
   if (!creatorId) return c.json({ error: { code: "FORBIDDEN", message: "Unknown EventSub subscription." } }, 403)
 
   if (verification.messageType === "webhook_callback_verification") {
+    await saveSubscription(c.env.DB, { creatorId, twitchId: parsed.subscription.id, status: "enabled", condition: parsed.subscription.condition })
     return c.text(parsed.challenge ?? "", 200)
   }
 
