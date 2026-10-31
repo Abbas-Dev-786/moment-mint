@@ -37,9 +37,13 @@ function MomentDetail({ momentId }: { momentId: string }) {
   const canRequestClip = !clip || ["FAILED", "RETRYABLE_FAILED", "MANUAL_REVIEW"].includes(clip.status)
   const saveMetadata = () => saveMetadataMutation.mutate(metadata)
   const copyCaption = async () => {
-    await navigator.clipboard.writeText(metadata.socialCaption)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    try {
+      await navigator.clipboard.writeText(metadata.socialCaption)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setActionError("The caption could not be copied. Select it and copy it manually.")
+    }
   }
   const openEditFlow = async () => {
     if (!clip) return
@@ -87,6 +91,7 @@ function MomentDetail({ momentId }: { momentId: string }) {
           </div>
           {clip?.error_code && <p className="text-sm text-destructive">Clip status: {statusLabel(clip.error_code)}. The candidate is retained for retry or manual review.</p>}
           {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+          {clipMutation.isError && <p aria-live="polite" className="text-sm text-destructive">{clipMutation.error.message}</p>}
         </section>
 
         <Separator />
@@ -100,7 +105,7 @@ function MomentDetail({ momentId }: { momentId: string }) {
           <div className="flex flex-wrap gap-2"><Button disabled={saveMetadataMutation.isPending || !metadata.title || !metadata.summary || !metadata.socialCaption} onClick={saveMetadata} type="button">{saveMetadataMutation.isPending ? "Saving…" : "Save metadata"}</Button><Button disabled={metadataMutation.isPending} onClick={() => metadataMutation.mutate()} type="button" variant="outline">{metadataMutation.isPending ? "Generating…" : savedMetadata ? "Regenerate with AI" : "Generate with AI"}</Button><Button disabled={!metadata.socialCaption} onClick={() => void copyCaption()} type="button" variant="ghost">{copied ? "Copied" : "Copy caption"}</Button></div>
         </section>
       </CardContent>
-      <CardFooter className="justify-between gap-2 border-t border-border/70 bg-card/40"><span className="text-xs text-muted-foreground">Choose what happens next.</span><div className="flex gap-2"><Button disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate("DISMISSED")} type="button" variant="ghost">Dismiss</Button><Button disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate("REVIEWED")} type="button" variant="outline">Mark reviewed</Button></div></CardFooter>
+      <CardFooter className="justify-between gap-2 border-t border-border/70 bg-card/40"><div><span className="text-xs text-muted-foreground">Choose what happens next.</span>{reviewMutation.isError && <p aria-live="polite" className="mt-1 text-sm text-destructive">{reviewMutation.error.message}</p>}</div><div className="flex gap-2"><Button disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate("DISMISSED")} type="button" variant="ghost">Dismiss</Button><Button disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate("REVIEWED")} type="button" variant="outline">Mark reviewed</Button></div></CardFooter>
 
       <Dialog onOpenChange={setConfirmClip} open={confirmClip}>
         <DialogContent>

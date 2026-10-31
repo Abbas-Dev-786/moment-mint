@@ -13,6 +13,7 @@ export type ErrorCode =
   | "MISSING_SCOPE"
   | "TWITCH_API_ERROR"
   | "RECONNECT_REQUIRED"
+  | "AI_UNAVAILABLE"
 
 export interface ApiSuccess<T> {
   data: T

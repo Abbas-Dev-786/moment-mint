@@ -15,11 +15,11 @@ export function useMe() {
 }
 
 export function useDashboard(active = true) {
-  return useQuery({ queryKey: queryKeys.dashboard, queryFn: api.dashboard, enabled: active, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
+  return useQuery({ queryKey: queryKeys.dashboard, queryFn: api.dashboard, enabled: active, staleTime: 4_000, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useMoments(active = true) {
-  return useQuery({ queryKey: queryKeys.moments, queryFn: () => api.moments(), enabled: active, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
+  return useQuery({ queryKey: queryKeys.moments, queryFn: () => api.moments(), enabled: active, staleTime: 4_000, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useMoment(momentId: string | null) {
@@ -36,6 +36,7 @@ export function useInvalidateWorkspace() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.me })
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })
     void queryClient.invalidateQueries({ queryKey: queryKeys.moments })
+    void queryClient.invalidateQueries({ queryKey: ["moment"] })
     void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
   }
 }

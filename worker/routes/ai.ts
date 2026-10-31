@@ -12,6 +12,6 @@ export const aiSmokeTest = async (c: AuthContext) => {
     await c.env.AI.run(c.env.AI_MODEL_ID, { messages: [{ role: "user", content: "Return only the word OK." }] })
     return c.json({ data: { available: true, modelId: c.env.AI_MODEL_ID } })
   } catch {
-    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Workers AI is unavailable." } }, 502)
+    return c.json({ error: { code: "AI_UNAVAILABLE", message: "Workers AI is unavailable." } }, 502)
   }
 }
