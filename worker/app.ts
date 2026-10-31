@@ -7,6 +7,8 @@ import { disconnect, logout, me, oauthCallback, oauthStart, requireCreator } fro
 import { eventSubStatus, registerEventSub, webhook } from "./eventsub.js"
 import { editMetadata, getClipEditUrl, getMoment, listMoments, requestClip, requestMetadata, retryClip, reviewMoment } from "./routes/moments.js"
 import { aiSmokeTest } from "./routes/ai.js"
+import { dashboardOverview } from "./routes/dashboard.js"
+import { getSettings, updateSettings } from "./routes/settings.js"
 
 type AppEnv = { Bindings: AppBindings; Variables: { creatorId: string } }
 export const app = new Hono<AppEnv>()
@@ -36,6 +38,11 @@ app.post("/api/auth/logout", logout)
 app.post("/api/twitch/disconnect", disconnect)
 app.post("/api/twitch/eventsub", registerEventSub)
 app.get("/api/twitch/eventsub", eventSubStatus)
+app.post("/api/twitch/eventsub/register", registerEventSub)
+app.get("/api/twitch/eventsub/status", eventSubStatus)
+app.get("/api/dashboard/overview", dashboardOverview)
+app.get("/api/settings", getSettings)
+app.patch("/api/settings", updateSettings)
 app.post("/api/ai/smoke-test", aiSmokeTest)
 app.get("/api/moments", listMoments)
 app.get("/api/moments/:momentId", getMoment)

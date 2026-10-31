@@ -20,8 +20,8 @@ export const findMomentForCreator = (db: D1Database, creatorId: string, momentId
 
 export const listMomentsForCreator = (db: D1Database, creatorId: string, limit = 50, status?: string) =>
   status
-    ? db.prepare("SELECT * FROM moments WHERE creator_id = ?1 AND status = ?2 ORDER BY created_at DESC LIMIT ?3").bind(creatorId, status, limit).all<MomentRow>()
-    : db.prepare("SELECT * FROM moments WHERE creator_id = ?1 ORDER BY created_at DESC LIMIT ?2").bind(creatorId, limit).all<MomentRow>()
+    ? db.prepare("SELECT moments.*, (SELECT status FROM clip_jobs WHERE clip_jobs.moment_id = moments.id ORDER BY attempt_number DESC, created_at DESC LIMIT 1) AS latest_clip_status, (SELECT status FROM ai_metadata WHERE ai_metadata.moment_id = moments.id LIMIT 1) AS ai_status FROM moments WHERE creator_id = ?1 AND status = ?2 ORDER BY created_at DESC LIMIT ?3").bind(creatorId, status, limit).all<MomentRow & { latest_clip_status: string | null; ai_status: string | null }>()
+    : db.prepare("SELECT moments.*, (SELECT status FROM clip_jobs WHERE clip_jobs.moment_id = moments.id ORDER BY attempt_number DESC, created_at DESC LIMIT 1) AS latest_clip_status, (SELECT status FROM ai_metadata WHERE ai_metadata.moment_id = moments.id LIMIT 1) AS ai_status FROM moments WHERE creator_id = ?1 ORDER BY created_at DESC LIMIT ?2").bind(creatorId, limit).all<MomentRow & { latest_clip_status: string | null; ai_status: string | null }>()
 
 export const findMomentWithCreator = (db: D1Database, momentId: string) =>
   db.prepare("SELECT moments.*, creators.twitch_user_id, creators.settings_json, creators.twitch_login, stream_sessions.title AS stream_title, stream_sessions.category_name, ai_metadata.creator_note FROM moments JOIN creators ON creators.id = moments.creator_id JOIN stream_sessions ON stream_sessions.id = moments.stream_session_id LEFT JOIN ai_metadata ON ai_metadata.moment_id = moments.id WHERE moments.id = ?1").bind(momentId).first<MomentRow & { twitch_user_id: string; settings_json: string; twitch_login: string; stream_title: string | null; category_name: string | null; creator_note: string | null }>()
