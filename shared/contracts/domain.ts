@@ -30,6 +30,7 @@ export const eventSubPayloadSchema = z.object({
     status: z.string(),
     condition: eventSubConditionSchema,
   }),
+  challenge: z.string().optional(),
   event: z.record(z.string(), z.unknown()).default({}),
 })
 

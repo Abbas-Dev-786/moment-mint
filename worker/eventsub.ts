@@ -62,7 +62,7 @@ export const webhook = async (c: Context<{ Bindings: AuthContext["env"] }>) => {
   if (!creatorId) return c.json({ error: { code: "FORBIDDEN", message: "Unknown EventSub subscription." } }, 403)
 
   if (verification.messageType === "webhook_callback_verification") {
-    return c.text(typeof parsed.event.challenge === "string" ? parsed.event.challenge : "", 200)
+    return c.text(parsed.challenge ?? "", 200)
   }
 
   if (verification.messageType === "revocation") {
