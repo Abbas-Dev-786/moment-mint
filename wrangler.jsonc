@@ -27,8 +27,7 @@
 		{
 			"binding": "DB",
 			"database_name": "momentmint",
-			// Replace this local placeholder with the ID returned by `wrangler d1 create`.
-			"database_id": "00000000000000000000000000000000",
+			"database_id": "61431a67-7eec-45ec-9a1d-cd8b500cdf89",
 			"migrations_dir": "database/migrations"
 		}
 	],
