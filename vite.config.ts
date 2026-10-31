@@ -12,13 +12,7 @@ export default defineConfig({
     cloudflare({
       config: {
         assets: {
-          run_worker_first: [
-            "/api/*",
-            "/health",
-            "/health/ready",
-            "/oauth/*",
-            "/webhooks/twitch",
-          ],
+          run_worker_first: true,
         },
       },
     }),

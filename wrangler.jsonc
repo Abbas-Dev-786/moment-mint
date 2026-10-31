@@ -4,21 +4,22 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "twitch",
+	"name": "moment-mint",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-10-23",
 	"assets": {
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true
 	},
 	"observability": {
 		"enabled": true
 	},
+	"keep_vars": true,
 	// These are safe local defaults. Replace the public URL, Twitch client ID,
 	// and callback with production values before running deploy:production.
 	"vars": {
-		"APP_BASE_URL": "http://localhost:5173",
-		"TWITCH_CLIENT_ID": "replace-with-twitch-client-id",
-		"TWITCH_REDIRECT_URI": "http://localhost:5173/oauth/twitch/callback",
+		"APP_BASE_URL": "https://moment-mint.abbasbhp787.workers.dev",
+		"TWITCH_REDIRECT_URI": "https://moment-mint.abbasbhp787.workers.dev/oauth/twitch/callback",
 		"AI_MODEL_ID": "@cf/openai/gpt-oss-20b",
 		"DEFAULT_GROUP_WINDOW_SECONDS": "30",
 		"DEFAULT_UNIQUE_VIEWER_THRESHOLD": "2"

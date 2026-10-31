@@ -16,8 +16,8 @@ if (config.includes("localhost")) {
   failures.push("wrangler.jsonc still points production variables at localhost")
 }
 
-if (!/"database_id"\s*:\s*"[0-9a-f]{32}"/i.test(config)) {
-  failures.push("wrangler.jsonc must contain a 32-character D1 database_id")
+if (!/"database_id"\s*:\s*"(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i.test(config)) {
+  failures.push("wrangler.jsonc must contain a valid D1 database_id")
 }
 
 for (const required of ["momentmint-jobs", "momentmint-jobs-dlq", '"binding": "AI"', '"*/5 * * * *"']) {
