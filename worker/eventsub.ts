@@ -6,7 +6,7 @@ import { findCreatorById, findCreatorByTwitchId } from "./repositories/creator.j
 import { findSubscriptionByTwitchId, saveSubscription, updateSubscriptionStatus } from "./repositories/eventsub.js"
 import { insertWebhookEvent, markWebhookQueued } from "./repositories/webhook.js"
 import { sendQueueMessage } from "./queue/contracts.js"
-import { listChatSubscriptions, registerChatSubscription } from "./twitch/client.js"
+import { listChatSubscriptions, registerChatSubscription, TwitchApiError } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
 
 const replayWindowMs = 10 * 60_000
@@ -99,8 +99,11 @@ export const registerEventSub = async (c: AuthContext) => {
     await saveSubscription(c.env.DB, { creatorId: creator.id, twitchId: subscription.id, status: subscription.status, condition: subscription.condition })
     return c.json({ data: { id: subscription.id, status: subscription.status, type: "channel.chat.message" } })
   } catch (error) {
-    console.error("EventSub registration failed", { creatorId: creator.id, error: error instanceof Error ? error.message : "unknown" })
-    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch EventSub registration failed." } }, 502)
+    const apiError = error instanceof TwitchApiError ? error : null
+    console.error("EventSub registration failed", { creatorId: creator.id, status: apiError?.status ?? 0, code: apiError?.code ?? (error instanceof Error ? error.message : "unknown") })
+    if (apiError?.code === "RECONNECT_REQUIRED") return c.json({ error: { code: "RECONNECT_REQUIRED", message: "Reconnect Twitch to refresh the authorization required for EventSub." } }, 401)
+    if (apiError?.code === "TWITCH_RATE_LIMITED") return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch is rate-limiting EventSub changes. Wait briefly and try again." } }, 429)
+    return c.json({ error: { code: "TWITCH_API_ERROR", message: "Twitch rejected EventSub registration. Check the Twitch client credentials, HTTPS callback URL, and granted user:read:chat scope." } }, 502)
   }
 }
 
