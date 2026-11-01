@@ -7,6 +7,7 @@ import { deleteSubscription, exchangeCode, revokeToken, requiredScopes, validate
 import { constantTimeEqual, decryptSecret, encryptSecret, sha256Base64, signValue } from "./lib/crypto.js"
 import { expiredOAuthFlowCookie, expiredSessionCookie, oauthFlowCookie, OAUTH_FLOW_COOKIE, parseCookies, SESSION_COOKIE, sessionCookie } from "./lib/cookies.js"
 import type { AppBindings } from "./env.js"
+import { deleteCreatorChatContext } from "./domain/chat-context.js"
 
 type AuthEnv = { Bindings: AppBindings; Variables: { creatorId: string } }
 type AuthContext = Context<AuthEnv>
@@ -109,6 +110,7 @@ export const disconnect = async (c: AuthContext) => {
     console.error("Twitch disconnect cleanup failed", { creatorId, error: error instanceof Error ? error.message : "unknown" })
   }
   await disableCreatorSubscriptions(c.env.DB, creatorId)
+  await deleteCreatorChatContext(c.env.DB, creatorId)
   await c.env.DB.prepare("UPDATE creators SET access_token_ciphertext = NULL, access_token_iv = NULL, refresh_token_ciphertext = NULL, refresh_token_iv = NULL, token_expires_at = NULL, scopes_json = '[]', connection_status = 'DISCONNECTED', updated_at = ?1 WHERE id = ?2").bind(new Date().toISOString(), creatorId).run()
   const value = parseCookies(c.req.header("cookie") ?? null)[SESSION_COOKIE]
   if (value) await deleteSession(c.env.DB, value.split(".")[0])

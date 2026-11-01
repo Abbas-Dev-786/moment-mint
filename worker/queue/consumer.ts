@@ -1,6 +1,7 @@
 import { validateQueueMessage, type QueueMessage } from "./contracts.js"
 import { findWebhookEvent, markWebhookFailed, markWebhookProcessed } from "../repositories/webhook.js"
 import { processNominationEvent } from "../domain/nomination.js"
+import { captureChatContextEvent } from "../domain/chat-context.js"
 import { processCreateClip, processGenerateMetadata, processVerifyClip } from "../domain/jobs.js"
 
 type ConsumerEnv = { DB: D1Database; MOMENTMINT_JOBS: Queue<QueueMessage>; AI?: Ai; AI_MODEL_ID: string; TOKEN_ENCRYPTION_KEY: string; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }
@@ -9,8 +10,10 @@ const processEvent = async (env: ConsumerEnv, eventId: string) => {
   const event = await findWebhookEvent(env.DB, eventId)
   if (!event || event.processing_status === "PROCESSED") return
   if (event.message_type === "notification" && event.creator_id && event.payload_json) {
-    const payload = JSON.parse(event.payload_json) as { broadcaster_user_id: string | null; chatter_user_id: string | null; message_id: string | null; message_text: string | null }
-    await processNominationEvent(env, { creatorId: event.creator_id, eventsubTimestamp: event.eventsub_timestamp ?? event.received_at, receivedAt: event.received_at, payload })
+    const payload = JSON.parse(event.payload_json) as { broadcaster_user_id: string | null; chatter_user_id: string | null; message_id: string | null; message_text: string | null; event_timestamp?: string | null }
+    const eventTimestamp = payload.event_timestamp ?? event.eventsub_timestamp ?? event.received_at
+    await captureChatContextEvent(env.DB, { creatorId: event.creator_id, sourceMessageId: payload.message_id, messageText: payload.message_text, eventsubTimestamp: eventTimestamp, receivedAt: event.received_at, isNomination: payload.message_text?.trim().toLowerCase() === "!moment" })
+    await processNominationEvent(env, { creatorId: event.creator_id, eventsubTimestamp: eventTimestamp, receivedAt: event.received_at, payload })
   }
   await markWebhookProcessed(env.DB, eventId)
 }

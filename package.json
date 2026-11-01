@@ -11,7 +11,7 @@
 		"preview": "pnpm run build && vite preview",
 		"deploy": "pnpm run build && wrangler deploy",
 		"production:check": "node scripts/production-check.mjs",
-		"deploy:production": "pnpm run production:check && pnpm run build && node scripts/scrub-production-artifacts.mjs && wrangler deploy",
+		"deploy:production": "pnpm run production:check && pnpm exec wrangler d1 migrations apply momentmint --remote && pnpm run build && node scripts/scrub-production-artifacts.mjs && wrangler deploy",
 		"cf-typegen": "wrangler types"
 	},
 	"dependencies": {

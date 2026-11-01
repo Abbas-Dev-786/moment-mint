@@ -80,6 +80,7 @@ The Worker module must expose `fetch`, `queue`, and `scheduled` handlers. Hono r
 | 6. AI metadata | Validated, editable metadata and deterministic fallback | AI failure cannot block nominations or clips |
 | 7. Creator dashboard | Onboarding, live overview, inbox, detail/review, settings | End-to-end candidate and clip are visible in the product |
 | 8. Hardening and demo | Security, accessibility, observability, live test, deployment, demo artifacts | Repeatable three-minute demo and acceptance checklist complete |
+| 9. AI community context | Short-lived, privacy-conscious chat evidence improves AI metadata usefulness | AI suggestions cite bounded community evidence, remain editable, and pass privacy/retention/live validation |
 
 Each phase must finish its tests and checkpoint before the next phase adds dependent behavior. Live Twitch and Cloudflare account validation are gates, not assumptions hidden inside implementation.
 
@@ -93,7 +94,7 @@ Each phase must finish its tests and checkpoint before the next phase adds depen
 6. A clip is not `READY_FOR_REVIEW` until Get Clips returns it.
 7. Queue payloads contain IDs and control data only; tokens and raw chat do not enter messages or logs.
 8. Encrypt Twitch access/refresh tokens and sensitive edit URLs with AES-GCM using Worker secrets.
-9. AI receives minimal sanitized context, never viewer IDs, credentials, or full chat history; all output is schema-validated and editable.
+9. AI receives minimal sanitized context, never viewer IDs, credentials, or full chat history; any retained chat evidence is bounded, creator-scoped, short-lived, disclosed, schema-validated, and editable.
 10. No external social publishing, VOD download/storage, video editing, computer vision, multi-channel teams, or gamification in the MVP.
 
 ## 6. Dependency and configuration decisions
@@ -104,7 +105,7 @@ The current `components.json` and installed UI primitives use Hugeicons, while t
 
 The TDD describes a monorepo under `apps/web`; the actual app is a root package. Keep the root package and introduce `shared/`, `database/`, `tests/`, and Worker submodules in place. A monorepo move would add risk without advancing an MVP requirement.
 
-The optional `chat_context_events` table is deferred until the core flow is stable. The first AI implementation uses stream title/category, approximate time, nomination count, and an optional creator note. Add short-lived sanitized chat context only if it can be implemented and deleted safely within the available delivery window.
+Phase 9 adds the previously optional `chat_context_events` path behind a creator setting. It captures only bounded sanitized messages, keeps them short-lived, clears processed webhook payloads, and requires cleanup/privacy tests before context capture is enabled.
 
 ## 7. Requirement traceability
 
@@ -114,9 +115,10 @@ The optional `chat_context_events` table is deferred until the core flow is stab
 | EventSub challenge, HMAC, replay, revocation, outbox | 1, 3, 8 | PRD FR-2.1-2.3; TDD 5.2-5.4, 6.1-6.2 |
 | Grouping and distinct-viewer threshold | 1, 4 | PRD FR-3.1-3.4; TDD 6.3-6.4 |
 | Clip create, verify, edit, retry | 4, 5, 8 | PRD FR-4.1-4.4; TDD 5.6-5.7, 10 |
-| AI metadata and fallback | 1, 6, 7, 8 | PRD FR-5.1-5.3; TDD 7 |
+| AI metadata and fallback | 1, 6, 7, 8, 9 | PRD FR-5.1-5.3; TDD 7 |
+| AI community evidence and retention | 9 | Privacy boundary, bounded context, evidence summary, adversarial prompt handling |
 | Dashboard and creator review | 0, 7, 8 | PRD FR-6.1-6.3 and screens 7.1-7.5 |
-| Reliability, privacy, accessibility, observability | 1-8 | PRD FR-7.1-7.4; TDD 13-14 |
+| Reliability, privacy, accessibility, observability | 1-9 | PRD FR-7.1-7.4; TDD 13-14 |
 | Deployable demo and hackathon proof | 0, 8 | Scope 9-10; TDD 15-16 |
 
 ## 8. Cross-cutting test strategy
@@ -138,7 +140,7 @@ The implementation is complete only when the product can connect a test broadcas
 - Measure EventSub timestamp versus observed stream/VOD timing.
 - Confirm `@cf/openai/gpt-oss-20b` model availability, response shape, latency, and Neurons consumption in the real account.
 - Confirm Queues and required configuration are available in the selected Cloudflare account.
-- Decide whether short-lived chat context is safe enough for MVP; otherwise omit it.
+- Phase 9 decides the exact short-lived chat-context window, retention period, creator disclosure, and feature-flag rollout. Do not enable context capture until those decisions and cleanup tests pass.
 
 ## 11. Reference notes
 

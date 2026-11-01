@@ -35,6 +35,18 @@ function MomentDetail({ momentId }: { momentId: string }) {
 
   const { moment, nominations, clips, metadata: savedMetadata } = detail.data
   const clip = clips[0]
+  const contextLabel = savedMetadata?.context_mode === "COMMUNITY_CONTEXT"
+    ? "Community context"
+    : savedMetadata?.context_mode === "CONTEXT_EXPIRED"
+      ? "Context expired"
+      : savedMetadata?.context_mode === "NO_CONTEXT"
+        ? "No usable context"
+        : "Minimal context"
+  const contextNotice = savedMetadata?.context_mode === "CONTEXT_EXPIRED"
+    ? "The short-lived chat sample expired before metadata was generated. These suggestions use the remaining stream and nomination details only."
+    : savedMetadata?.context_mode === "NO_CONTEXT"
+      ? "No usable chat sample was available around this nomination. These suggestions use the remaining stream and nomination details only."
+      : savedMetadata?.evidence_summary ?? "No usable community context was available; review the clip before sharing."
   const canRequestClip = !clip || ["FAILED", "RETRYABLE_FAILED", "MANUAL_REVIEW"].includes(clip.status)
   const saveMetadata = () => saveMetadataMutation.mutate(metadata)
   const copyCaption = async () => {
@@ -100,6 +112,7 @@ function MomentDetail({ momentId }: { momentId: string }) {
 
         <section aria-labelledby="metadata-section-title" className="grid gap-4">
           <div className="flex items-start justify-between gap-3"><div><h3 className="font-medium" id="metadata-section-title">Editable metadata</h3><p className="mt-1 text-sm text-muted-foreground">AI has not watched the video. Review every field before sharing.</p></div><StatusPill value={savedMetadata?.status ?? "NOT_REQUESTED"} /></div>
+          {savedMetadata && <div className="rounded-xl border border-border/70 bg-muted/30 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Evidence used</p><span className="text-xs text-muted-foreground">{contextLabel}</span></div><p className="mt-2 text-sm leading-6 text-muted-foreground">{contextNotice}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground"><span className="rounded-full bg-background px-2.5 py-1">{savedMetadata.evidence_message_count ?? 0} sampled message{savedMetadata.evidence_message_count === 1 ? "" : "s"}</span>{savedMetadata.evidence_window_start && savedMetadata.evidence_window_end && <span className="rounded-full bg-background px-2.5 py-1">{formatApproximateTime(savedMetadata.evidence_window_start)}–{formatApproximateTime(savedMetadata.evidence_window_end)}</span>}</div>{savedMetadata.confidence_note && <p className="mt-3 text-xs leading-5 text-muted-foreground">{savedMetadata.confidence_note}</p>}</div>}
           <label className="grid gap-2 text-sm font-medium" htmlFor="metadata-title">Title<input aria-label="Metadata title" className="h-9 w-full rounded-4xl border border-input bg-input/30 px-3 font-normal outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50]" id="metadata-title" maxLength={80} onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))} value={metadata.title} /></label>
           <label className="grid gap-2 text-sm font-medium" htmlFor="metadata-summary">Summary<Textarea aria-label="Metadata summary" id="metadata-summary" maxLength={240} onChange={(event) => setMetadata((current) => ({ ...current, summary: event.target.value }))} value={metadata.summary} /></label>
           <label className="grid gap-2 text-sm font-medium" htmlFor="metadata-category">Category<select aria-label="Metadata category" className="h-9 w-full rounded-4xl border border-input bg-input/30 px-3 text-sm font-normal outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" id="metadata-category" onChange={(event) => setMetadata((current) => ({ ...current, category: event.target.value }))} value={metadata.category}><option value="funny">Funny</option><option value="clutch">Clutch</option><option value="surprise">Surprise</option><option value="wholesome">Wholesome</option><option value="reaction">Reaction</option><option value="other">Other</option></select></label>

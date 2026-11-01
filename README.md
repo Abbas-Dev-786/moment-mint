@@ -65,7 +65,7 @@ The repository does not create or select Cloudflare resources automatically. Com
    pnpm run deploy:production
    ```
 
-   This command fails before deployment if the Wrangler file still contains placeholders, localhost values, or an invalid D1 ID.
+   This command first applies pending remote D1 migrations, then fails before deployment if the Wrangler file still contains placeholders, localhost values, or an invalid D1 ID. The Wrangler account must have access to the configured D1 database.
 
 6. Smoke-test the deployed service and inspect Worker logs:
 
@@ -113,4 +113,4 @@ The current root layout intentionally stays as one Cloudflare Vite application. 
 - A Twitch clip is not shown as ready until Twitch confirms it through Get Clips.
 - Approximate EventSub timing is never presented as a precise video frame.
 - MomentMint does not publish to third-party social networks in the MVP.
-- Ordinary chat messages are not retained as a product data store; only the minimum EventSub event data needed to form and process a moment is persisted.
+- Ordinary chat messages are not retained indefinitely. If the creator enables AI community context, MomentMint keeps only a sanitized, creator-scoped sample around nominated moments. It expires within 24 hours after metadata generation and never later than seven days after collection; otherwise only the minimum EventSub data needed to form and process a moment is persisted.

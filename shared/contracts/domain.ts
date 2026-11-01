@@ -5,6 +5,7 @@ export const creatorSettingsSchema = z.object({
   groupWindowSeconds: z.number().int().min(5).max(120),
   uniqueViewerThreshold: z.number().int().min(1).max(100),
   autoClipEnabled: z.boolean(),
+  communityContextEnabled: z.boolean().default(false),
 })
 
 export type CreatorSettings = z.infer<typeof creatorSettingsSchema>
@@ -51,12 +52,15 @@ export const errorCodes = [
 export type SafeErrorCode = (typeof errorCodes)[number]
 
 export const aiCategorySchema = z.enum(["funny", "clutch", "surprise", "wholesome", "reaction", "other"])
+export const aiContextModeSchema = z.enum(["MINIMAL", "COMMUNITY_CONTEXT", "NO_CONTEXT", "CONTEXT_EXPIRED"])
+export type AiContextMode = z.infer<typeof aiContextModeSchema>
 
 export const aiMetadataSchema = z.object({
   title: z.string().trim().min(3).max(80),
   summary: z.string().trim().min(1).max(240),
   category: aiCategorySchema,
   socialCaption: z.string().trim().min(1).max(280),
+  evidenceSummary: z.string().trim().max(240).optional(),
   confidenceNote: z.string().trim().max(240).optional(),
 }).strict()
 

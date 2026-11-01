@@ -22,6 +22,7 @@ function SettingsPage() {
   const [threshold, setThreshold] = useState(2)
   const [windowSeconds, setWindowSeconds] = useState(30)
   const [autoClip, setAutoClip] = useState(false)
+  const [communityContext, setCommunityContext] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
@@ -31,6 +32,7 @@ function SettingsPage() {
       setThreshold(settings.data.settings.uniqueViewerThreshold)
       setWindowSeconds(settings.data.settings.groupWindowSeconds)
       setAutoClip(settings.data.settings.autoClipEnabled)
+      setCommunityContext(settings.data.settings.communityContextEnabled)
     }
   }, [dirty, settings.data])
 
@@ -44,7 +46,7 @@ function SettingsPage() {
   if (settings.isError || !settings.data) return <section className="max-w-xl"><RequestError error={settings.error} onRetry={() => void settings.refetch()} title="We could not load settings" /></section>
 
   const data = settings.data
-  const save = (confirmAutoClip = false) => update.mutate({ groupWindowSeconds: windowSeconds, uniqueViewerThreshold: threshold, autoClipEnabled: autoClip, ...(confirmAutoClip ? { confirmAutoClip: true } : {}) })
+  const save = (confirmAutoClip = false) => update.mutate({ groupWindowSeconds: windowSeconds, uniqueViewerThreshold: threshold, autoClipEnabled: autoClip, communityContextEnabled: communityContext, ...(confirmAutoClip ? { confirmAutoClip: true } : {}) })
   const submit = () => {
     if (autoClip && !data.settings.autoClipEnabled) setConfirmOpen(true)
     else save()
@@ -60,7 +62,7 @@ function SettingsPage() {
 
     <Card><CardHeader><CardTitle>Moment discovery</CardTitle><CardDescription>Viewers type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{data.settings.nominationCommand}</code> in your live chat.</CardDescription></CardHeader><CardContent className="grid gap-5"><label className="grid gap-2 text-sm font-medium" htmlFor="threshold">Distinct viewers to qualify<span className="font-normal text-muted-foreground">Repeated nominations from one viewer count once.</span><Input id="threshold" max={100} min={1} onChange={(event) => updateField(setThreshold, Number(event.target.value))} type="number" value={threshold} /></label><label className="grid gap-2 text-sm font-medium" htmlFor="window">Grouping window in seconds<span className="font-normal text-muted-foreground">Nominations within this window are grouped around the first signal.</span><Input id="window" max={120} min={5} onChange={(event) => updateField(setWindowSeconds, Number(event.target.value))} type="number" value={windowSeconds} /></label><div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4"><label className="grid gap-1 text-sm font-medium" htmlFor="auto-clip">Automatic clip creation<span className="font-normal text-muted-foreground">When the threshold is met, create a clip automatically for review.</span></label><Switch aria-label="Automatic clip creation" checked={autoClip} id="auto-clip" onCheckedChange={(checked) => { setDirty(true); setAutoClip(checked) }} /></div><p className="text-sm leading-6 text-muted-foreground">{data.disclosure}</p></CardContent><CardFooter><Button disabled={update.isPending || !dirty} onClick={submit} type="button">{update.isPending ? "Saving…" : "Save changes"}</Button>{dirty && <span className="ml-3 text-sm text-muted-foreground">Unsaved changes</span>}</CardFooter></Card>
 
-    <Card><CardHeader><CardTitle>Privacy and AI context</CardTitle><CardDescription>MomentMint keeps the AI context intentionally small.</CardDescription></CardHeader><CardContent><p className="text-sm leading-6 text-muted-foreground">{data.chatContext.explanation} AI suggestions are editable and never publish to third-party networks.</p></CardContent></Card>
+    <Card><CardHeader><CardTitle>Privacy and AI context</CardTitle><CardDescription>MomentMint keeps the AI context intentionally small.</CardDescription></CardHeader><CardContent className="grid gap-4"><div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-4"><label className="grid gap-1 text-sm font-medium" htmlFor="community-context">Use short-lived community context for AI<span className="font-normal text-muted-foreground">Sample nearby chat without viewer identities to make AI suggestions more specific.</span></label><Switch aria-label="Use short-lived community context for AI" checked={communityContext} id="community-context" onCheckedChange={(checked) => { setDirty(true); setCommunityContext(checked) }} /></div><p className="text-sm leading-6 text-muted-foreground">{data.chatContext.explanation} AI suggestions are editable and never publish to third-party networks.</p></CardContent></Card>
 
     {disconnect.isError && <RequestError error={disconnect.error} title="Twitch was not disconnected" />}
     {logout.isError && <RequestError error={logout.error} title="You were not logged out" />}

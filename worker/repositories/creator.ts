@@ -21,6 +21,7 @@ export const defaultSettings: CreatorSettings = {
   groupWindowSeconds: 30,
   uniqueViewerThreshold: 2,
   autoClipEnabled: false,
+  communityContextEnabled: false,
 }
 
 export const creatorSettings = (row: Pick<CreatorRow, "settings_json">) =>

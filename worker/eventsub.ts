@@ -8,17 +8,23 @@ import { insertWebhookEvent, markWebhookQueued } from "./repositories/webhook.js
 import { sendQueueMessage } from "./queue/contracts.js"
 import { deleteSubscription, listChatSubscriptions, registerChatSubscription, requiredScopes, TwitchApiError } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
+import { sanitizeChatText } from "./domain/chat-context.js"
 
 const replayWindowMs = 10 * 60_000
 
-const safeEventPayload = (event: Record<string, unknown>) => {
-  const messageText = typeof event.message === "object" && event.message !== null && "text" in event.message && typeof event.message.text === "string" ? event.message.text.trim() : null
+const validTimestamp = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null
+
+export const safeEventPayload = (event: Record<string, unknown>) => {
+  const messageText = typeof event.message === "object" && event.message !== null && "text" in event.message && typeof event.message.text === "string" ? sanitizeChatText(event.message.text) : null
+  const isNomination = messageText?.toLowerCase() === "!moment"
   return {
   broadcaster_user_id: typeof event.broadcaster_user_id === "string" ? event.broadcaster_user_id : null,
-  chatter_user_id: typeof event.chatter_user_id === "string" ? event.chatter_user_id : null,
+  chatter_user_id: isNomination && typeof event.chatter_user_id === "string" ? event.chatter_user_id : null,
   message_id: typeof event.message_id === "string" ? event.message_id : null,
-  // Only retain the exact nomination command. Ordinary chat is not a durable product record.
-  message_text: messageText?.toLowerCase() === "!moment" ? messageText : null,
+  event_timestamp: validTimestamp(event.message_timestamp),
+  // Text is retained only in the short-lived webhook outbox until the queue
+  // consumer converts it into creator-scoped context or clears the payload.
+  message_text: messageText,
   message_type: typeof event.message_type === "string" ? event.message_type : null,
   }
 }

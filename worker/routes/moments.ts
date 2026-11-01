@@ -6,7 +6,7 @@ import { clampPageSize } from "../lib/ids.js"
 import { createClipJob, findActiveClipJobForMoment, findClipJobForCreator, findLatestClipJobForMoment } from "../repositories/clip.js"
 import { findMetadataForCreator } from "../repositories/metadata.js"
 import { findMomentForCreator, findMomentWithCreator, listMomentsForCreator, transitionMoment } from "../repositories/moment.js"
-import { fallbackMetadata } from "../ai/metadata.js"
+import { AI_PROMPT_VERSION, fallbackMetadata } from "../ai/metadata.js"
 import { sendQueueMessage } from "../queue/contracts.js"
 import { upsertMetadataForCreator } from "../repositories/metadata.js"
 import { decryptSecret } from "../lib/crypto.js"
@@ -102,7 +102,7 @@ export const editMetadata = async (c: AuthContext) => {
   const parsed = aiMetadataSchema.safeParse(body)
   if (!parsed.success) return c.json({ error: { code: "BAD_REQUEST", message: "Metadata is invalid." } }, 400)
   const existing = await findMetadataForCreator(c.env.DB, creatorId, moment.id)
-  await upsertMetadataForCreator(c.env.DB, { creatorId, momentId: moment.id, modelId: existing?.model_id ?? c.env.AI_MODEL_ID, status: "READY", ...parsed.data, socialCaption: parsed.data.socialCaption, promptVersion: existing?.prompt_version ?? "manual-edit", generatedAt: existing?.generated_at ?? new Date().toISOString() })
+  await upsertMetadataForCreator(c.env.DB, { creatorId, momentId: moment.id, modelId: existing?.model_id ?? c.env.AI_MODEL_ID, status: "READY", title: parsed.data.title, summary: parsed.data.summary, category: parsed.data.category, socialCaption: parsed.data.socialCaption, promptVersion: existing?.prompt_version ?? "manual-edit", creatorNote: existing?.creator_note ?? null, evidenceSummary: existing?.evidence_summary ?? null, evidenceMessageCount: existing?.evidence_message_count ?? null, evidenceWindowStart: existing?.evidence_window_start ?? null, evidenceWindowEnd: existing?.evidence_window_end ?? null, confidenceNote: existing?.confidence_note ?? null, contextMode: existing?.context_mode ?? "MINIMAL", generatedAt: existing?.generated_at ?? new Date().toISOString() })
   return c.json({ data: { metadata: await findMetadataForCreator(c.env.DB, creatorId, moment.id) } })
 }
 
@@ -133,7 +133,7 @@ export const requestMetadata = async (c: AuthContext) => {
     return c.json({ error: { code: "RATE_LIMITED", message: "Metadata generation is temporarily limited. Try again shortly." } }, 429)
   }
   const fallback = fallbackMetadata(moment)
-  await upsertMetadataForCreator(c.env.DB, { creatorId, momentId: moment.id, modelId: c.env.AI_MODEL_ID, status: "PENDING", ...fallback, promptVersion: "metadata-v1", creatorNote: parsed.data.creatorNote ?? null, generatedAt: null })
+  await upsertMetadataForCreator(c.env.DB, { creatorId, momentId: moment.id, modelId: c.env.AI_MODEL_ID, status: "PENDING", ...fallback, promptVersion: AI_PROMPT_VERSION, creatorNote: parsed.data.creatorNote ?? null, generatedAt: null })
   try {
     await sendQueueMessage(c.env.MOMENTMINT_JOBS, { type: "generate_metadata", momentId: moment.id })
   } catch (error) {

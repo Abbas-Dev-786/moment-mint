@@ -4,6 +4,7 @@ import { createMoment, createNominationIfNew, findOpenMomentsForSession, refresh
 import { findOrCreateStreamSession } from "../repositories/stream.js"
 import { newId, nowIso } from "../lib/ids.js"
 import { sendQueueMessage } from "../queue/contracts.js"
+import { attachUnassignedContextToMoment } from "./chat-context.js"
 
 export const isMomentCommand = (text: string | null | undefined, configuredCommand = "!moment") =>
   typeof text === "string" && text.trim().toLowerCase() === configuredCommand.trim().toLowerCase()
@@ -38,6 +39,7 @@ export const processNominationEvent = async (env: { DB: D1Database; MOMENTMINT_J
   const matching = selectGroupingCandidate(candidates.results, incomingAt)
   const moment = matching ?? await createMoment(env.DB, { creatorId: creator.id, streamSessionId: session.id, anchorEventsubAt: input.eventsubTimestamp, anchorReceivedAt: input.receivedAt, groupWindowSeconds: settings.groupWindowSeconds, thresholdRequired: settings.uniqueViewerThreshold })
   if (!moment) return { accepted: false, reason: "INVALID_EVENT" }
+  if (settings.communityContextEnabled) await attachUnassignedContextToMoment(env.DB, { creatorId: creator.id, streamSessionId: session.id, momentId: moment.id, anchorEventsubAt: moment.anchor_eventsub_at })
 
   const nomination = await createNominationIfNew(env.DB, { id: newId("nomination"), momentId: moment.id, creatorId: creator.id, viewerTwitchId: input.payload.chatter_user_id, sourceMessageId: input.payload.message_id, eventsubTimestamp: input.eventsubTimestamp, receivedAt: input.receivedAt })
   if (nomination.meta.changes === 0) {

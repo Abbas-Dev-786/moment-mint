@@ -24,10 +24,10 @@ export const markWebhookQueued = (db: D1Database, eventId: string) =>
   db.prepare("UPDATE webhook_events SET processing_status = 'QUEUED', attempts = attempts + 1, last_queued_at = ?1 WHERE id = ?2 AND processing_status IN ('RECEIVED','QUEUED')").bind(nowIso(), eventId).run()
 
 export const markWebhookProcessed = (db: D1Database, eventId: string) =>
-  db.prepare("UPDATE webhook_events SET processing_status = 'PROCESSED', processed_at = ?1, last_error_code = NULL WHERE id = ?2").bind(nowIso(), eventId).run()
+  db.prepare("UPDATE webhook_events SET processing_status = 'PROCESSED', processed_at = ?1, last_error_code = NULL, payload_json = NULL WHERE id = ?2").bind(nowIso(), eventId).run()
 
 export const markWebhookFailed = (db: D1Database, eventId: string, errorCode: string) =>
-  db.prepare("UPDATE webhook_events SET processing_status = 'FAILED', last_error_code = ?1 WHERE id = ?2").bind(errorCode, eventId).run()
+  db.prepare("UPDATE webhook_events SET processing_status = 'FAILED', last_error_code = ?1, payload_json = NULL WHERE id = ?2").bind(errorCode, eventId).run()
 
 export const findWebhookEvent = (db: D1Database, eventId: string) =>
   db.prepare("SELECT * FROM webhook_events WHERE id = ?1").bind(eventId).first<WebhookEventRow>()

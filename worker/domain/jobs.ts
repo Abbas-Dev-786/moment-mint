@@ -1,10 +1,10 @@
 import { encryptSecret } from "../lib/crypto.js"
 import { creatorSettings, updateCreatorStatus } from "../repositories/creator.js"
 import { claimClipJob, findClipJobWithCreator, markClipJob, saveClipCreation, saveClipVerification } from "../repositories/clip.js"
-import { findMetadataForCreator, upsertMetadataForCreator } from "../repositories/metadata.js"
+import { findMetadataForCreator } from "../repositories/metadata.js"
 import { findMomentWithCreator } from "../repositories/moment.js"
 import { createClipFromMoment, getClip, TwitchApiError } from "../twitch/client.js"
-import { generateMetadata, AI_PROMPT_VERSION } from "../ai/metadata.js"
+import { generateMetadata, saveGeneratedMetadata } from "../ai/metadata.js"
 import type { QueueMessage } from "../../shared/contracts/domain.js"
 
 type JobEnv = {
@@ -114,5 +114,5 @@ export const processGenerateMetadata = async (momentId: string, env: JobEnv) => 
   const existing = await findMetadataForCreator(env.DB, moment.creator_id, momentId)
   if (!existing || existing.status !== "PENDING") return
   const result = await generateMetadata(env, moment)
-  await upsertMetadataForCreator(env.DB, { creatorId: moment.creator_id, momentId, modelId: env.AI_MODEL_ID, status: result.status, title: result.output.title, summary: result.output.summary, category: result.output.category, socialCaption: result.output.socialCaption, promptVersion: AI_PROMPT_VERSION, creatorNote: moment.creator_note, generatedAt: new Date().toISOString() })
+  await saveGeneratedMetadata(env, moment, result)
 }

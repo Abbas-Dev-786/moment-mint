@@ -221,12 +221,14 @@ The model is used only for:
 - Short summary based on supplied context.
 - Content category label.
 - Social caption.
+- A short evidence summary and confidence note describing sampled community reaction when that context is enabled.
 
 Model constraints:
 
 - AI is not called for every chat message.
 - AI is invoked only for a candidate when the streamer requests generation or when a verified clip is ready, depending on the chosen flow.
 - AI never receives Twitch tokens, raw viewer IDs, full chat history, or unrelated personal data.
+- Community context is creator-scoped, sanitized, bounded to a small time window, and retained for no more than 24 hours after association with a moment. Unassigned buffer rows expire after five minutes.
 - Model response must be parsed/validated with Zod.
 - Model cannot claim to have seen the video.
 - Invalid/empty/timeout response produces fallback metadata and never blocks core functions.
@@ -670,19 +672,22 @@ Use a unique key to prevent more than one automatic job per moment; manual retri
 | `generated_at` | TEXT | Nullable |
 | `updated_at` | TEXT NOT NULL | UTC |
 
-### 8.10 `chat_context_events` (temporary, optional)
+### 8.10 `chat_context_events` (temporary, creator-scoped)
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | TEXT PK | UUID |
 | `creator_id` | TEXT FK | Owner |
+| `moment_id` | TEXT FK nullable | Associated candidate once a nomination anchors the window |
 | `stream_session_id` | TEXT FK | Session |
+| `source_message_id` | TEXT UNIQUE | EventSub deduplication key |
 | `eventsub_timestamp` | TEXT NOT NULL | Approximate event marker |
 | `received_at` | TEXT NOT NULL | Worker receipt time |
-| `message_text_sanitized` | TEXT NOT NULL | Limited text excerpt; no viewer ID |
-| `expires_at` | TEXT NOT NULL | Short TTL |
+| `message_text` | TEXT NOT NULL | Limited sanitized text; no viewer ID |
+| `expires_at` | TEXT NOT NULL | Five-minute buffer or 24-hour associated-context TTL |
+| `created_at` | TEXT NOT NULL | UTC |
 
-Keep this table optional. If chat-context storage is not implemented safely in the available time, use only nomination count, stream title, time, and creator note for AI metadata. A scheduled cleanup deletes expired chat context.
+The table is enabled only when the creator setting is on. A scheduled cleanup deletes expired rows, and disconnect deletes the creator's remaining context. Raw webhook payloads are cleared after successful notification processing.
 
 ### 8.11 Indexes
 

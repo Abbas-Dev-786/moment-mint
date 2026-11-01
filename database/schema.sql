@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS creators (
   refresh_token_iv TEXT,
   token_expires_at TEXT,
   scopes_json TEXT NOT NULL DEFAULT '[]',
-  settings_json TEXT NOT NULL DEFAULT '{"nominationCommand":"!moment","groupWindowSeconds":30,"uniqueViewerThreshold":2,"autoClipEnabled":false}',
+  settings_json TEXT NOT NULL DEFAULT '{"nominationCommand":"!moment","groupWindowSeconds":30,"uniqueViewerThreshold":2,"autoClipEnabled":false,"communityContextEnabled":false}',
   connection_status TEXT NOT NULL DEFAULT 'DISCONNECTED' CHECK (connection_status IN ('CONNECTED','RECONNECT_REQUIRED','DISCONNECTED')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -143,8 +143,27 @@ CREATE TABLE IF NOT EXISTS ai_metadata (
   social_caption TEXT NOT NULL,
   prompt_version TEXT NOT NULL,
   creator_note TEXT,
+  evidence_summary TEXT,
+  evidence_message_count INTEGER,
+  evidence_window_start TEXT,
+  evidence_window_end TEXT,
+  confidence_note TEXT,
+  context_mode TEXT NOT NULL DEFAULT 'MINIMAL' CHECK (context_mode IN ('MINIMAL','COMMUNITY_CONTEXT','NO_CONTEXT','CONTEXT_EXPIRED')),
   generated_at TEXT,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_context_events (
+  id TEXT PRIMARY KEY,
+  creator_id TEXT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  moment_id TEXT REFERENCES moments(id) ON DELETE CASCADE,
+  stream_session_id TEXT NOT NULL REFERENCES stream_sessions(id) ON DELETE CASCADE,
+  source_message_id TEXT NOT NULL UNIQUE,
+  message_text TEXT NOT NULL,
+  eventsub_timestamp TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhook_events_outbox ON webhook_events(processing_status, last_queued_at);
@@ -156,3 +175,6 @@ CREATE INDEX IF NOT EXISTS idx_oauth_states_expiry ON oauth_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_action_rate_limits_window ON action_rate_limits(window_started_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_sessions_current_creator ON stream_sessions(creator_id) WHERE ended_at IS NULL AND status IN ('LIVE','UNKNOWN');
+CREATE INDEX IF NOT EXISTS idx_chat_context_session_time ON chat_context_events(creator_id, stream_session_id, eventsub_timestamp);
+CREATE INDEX IF NOT EXISTS idx_chat_context_moment_time ON chat_context_events(creator_id, moment_id, eventsub_timestamp);
+CREATE INDEX IF NOT EXISTS idx_chat_context_expiry ON chat_context_events(expires_at);
