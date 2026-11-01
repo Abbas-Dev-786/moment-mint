@@ -68,6 +68,7 @@ export const processCreateClip = async (clipJobId: string, env: JobEnv) => {
     await enqueueVerification(env, clipJobId, 1)
   } catch (error) {
     const apiError = error instanceof TwitchApiError ? error : new TwitchApiError(0, error instanceof Error && error.message === "RECONNECT_REQUIRED" ? "RECONNECT_REQUIRED" : "TWITCH_NETWORK_ERROR", true)
+    console.error("Clip creation failed", { clipJobId, code: apiError.code, detail: apiError.upstreamMessage ?? null })
     if (apiError.code === "RECONNECT_REQUIRED") await updateCreatorStatus(env.DB, job.creator_id, "RECONNECT_REQUIRED")
     await markClipJob(env.DB, clipJobId, apiError.retryable ? "RETRYABLE_FAILED" : "FAILED", apiError.code)
     await markMomentClipFailed(env.DB, job)
@@ -94,6 +95,7 @@ export const processVerifyClip = async (clipJobId: string, attempt: number, env:
     await env.DB.prepare("UPDATE moments SET status = 'MANUAL_REVIEW', updated_at = ?1 WHERE id = ?2 AND creator_id = ?3").bind(new Date().toISOString(), job.moment_id, job.creator_id).run()
   } catch (error) {
     const apiError = error instanceof TwitchApiError ? error : new TwitchApiError(0, error instanceof Error && error.message === "RECONNECT_REQUIRED" ? "RECONNECT_REQUIRED" : "TWITCH_NETWORK_ERROR", true)
+    console.error("Clip verification failed", { clipJobId, code: apiError.code, detail: apiError.upstreamMessage ?? null })
     if (apiError.code === "RECONNECT_REQUIRED") await updateCreatorStatus(env.DB, job.creator_id, "RECONNECT_REQUIRED")
     if (apiError.retryable && Date.now() < Date.parse(job.verify_deadline_at) && attempt < 3) {
       await enqueueVerification(env, clipJobId, attempt + 1)

@@ -15,6 +15,14 @@ export const isTrustedTwitchUrl = (value: string) => {
   }
 }
 
+const twitchUrlHost = (value: string) => {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return "invalid-url"
+  }
+}
+
 // Webhook EventSub subscriptions are created with an app access token. For
 // channel.chat.message, Twitch also requires the chatting user's bot scope and
 // the broadcaster's bot scope in addition to chat-read permission.
@@ -174,7 +182,7 @@ export const createClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string
   const response = await authorizedFetch(env, creator, `/clips?broadcaster_id=${encodeURIComponent(creator.twitch_user_id)}`, { method: "POST" })
   const body = await twitchResponse<{ data?: [{ id?: string; edit_url?: string }] }>(response)
   const created = body.data?.[0]
-  if (!created?.id || !created.edit_url || !isTrustedTwitchUrl(created.edit_url)) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false)
+  if (!created?.id || !created.edit_url || !isTrustedTwitchUrl(created.edit_url)) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false, `edit_url:${created?.edit_url ? twitchUrlHost(created.edit_url) : "missing"}`)
   return { id: created.id, editUrl: created.edit_url }
 }
 
@@ -182,8 +190,9 @@ export const getClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; T
   const response = await authorizedFetch(env, creator, `/clips?id=${encodeURIComponent(clipId)}`, { method: "GET" })
   const body = await twitchResponse<{ data?: TwitchClipRecord[] }>(response)
   const clip = body.data?.[0] ?? null
-  if (clip && (!isTrustedTwitchUrl(clip.url) || !isTrustedTwitchUrl(clip.embed_url) || !isTrustedTwitchUrl(clip.thumbnail_url))) {
-    throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false)
+  if (clip) {
+    const invalidFields = (["url", "embed_url", "thumbnail_url"] as const).filter((field) => !isTrustedTwitchUrl(clip[field])).map((field) => `${field}:${twitchUrlHost(clip[field])}`)
+    if (invalidFields.length > 0) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false, invalidFields.join(","))
   }
   return clip
 }
