@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { StatusPill } from "@/components/shared/status-pill"
+import { RequestError } from "@/components/shared/feedback"
 import { api, type MetadataInput } from "@/lib/api"
-import { formatApproximateTime, statusLabel } from "@/lib/format"
+import { errorLabel, formatApproximateTime } from "@/lib/format"
 import { useMoment, useWorkspaceMutation } from "@/hooks/use-momentmint"
 
 function MomentDetail({ momentId }: { momentId: string }) {
@@ -65,14 +66,14 @@ function MomentDetail({ momentId }: { momentId: string }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="gap-4 bg-card/70">
-        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
           <div>
             <CardDescription>Approximate nomination time</CardDescription>
             <CardTitle className="mt-1 text-2xl">{formatApproximateTime(moment.anchor_eventsub_at)}</CardTitle>
           </div>
           <StatusPill value={moment.status} />
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">EventSub provides an approximate event marker, not a frame-accurate video timestamp.</p>
+        <div className="flex flex-wrap items-center gap-3 text-xs leading-5 text-muted-foreground"><span>EventSub gives an approximate marker; the clip targets that point in the stream recording.</span>{detail.isFetching && <span className="text-primary">Updating…</span>}</div>
       </CardHeader>
       <CardContent className="grid gap-6 p-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -89,9 +90,10 @@ function MomentDetail({ momentId }: { momentId: string }) {
             {clip && <Button disabled={editLoading} onClick={() => void openEditFlow()} type="button" variant="outline">{editLoading ? "Opening…" : "Open edit flow"}</Button>}
             {canRequestClip && <Button onClick={() => setConfirmClip(true)} type="button">{clip ? "Retry clip" : "Create clip"}</Button>}
           </div>
-          {clip?.error_code && <p className="text-sm text-destructive">Clip status: {statusLabel(clip.error_code)}. The candidate is retained for retry or manual review.</p>}
+          {clip?.error_code && <p className="text-sm text-destructive">{errorLabel(clip.error_code)} The candidate is retained so you can retry it.</p>}
           {actionError && <p className="text-sm text-destructive">{actionError}</p>}
-          {clipMutation.isError && <p aria-live="polite" className="text-sm text-destructive">{clipMutation.error.message}</p>}
+          {clipMutation.isError && <RequestError error={clipMutation.error} title="The clip request could not be started" />}
+          {clipMutation.isSuccess && <p aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/8 p-3 text-sm text-muted-foreground">Clip request queued. This panel will update automatically when Twitch confirms it.</p>}
         </section>
 
         <Separator />

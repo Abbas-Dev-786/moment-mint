@@ -3,12 +3,22 @@ export type ApiErrorBody = { error: { code: string; message: string; requestId?:
 export class ApiRequestError extends Error {
   readonly status: number
   readonly code: string
+  readonly requestId?: string
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.error.message)
     this.status = status
     this.code = body.error.code
+    this.requestId = body.error.requestId
   }
+}
+
+export const isUnauthorized = (error: unknown) => error instanceof ApiRequestError && error.status === 401
+
+export const errorMessage = (error: unknown, fallback = "Something went wrong. Try again.") => {
+  if (error instanceof ApiRequestError) return error.message || fallback
+  if (error instanceof Error && error.message) return error.message
+  return fallback
 }
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {

@@ -15,33 +15,35 @@ export function useMe() {
 }
 
 export function useDashboard(active = true) {
-  return useQuery({ queryKey: queryKeys.dashboard, queryFn: api.dashboard, enabled: active, staleTime: 4_000, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
+  return useQuery({ queryKey: queryKeys.dashboard, queryFn: api.dashboard, enabled: active, staleTime: 2_000, refetchInterval: active ? 4_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useMoments(active = true) {
-  return useQuery({ queryKey: queryKeys.moments, queryFn: () => api.moments(), enabled: active, staleTime: 4_000, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
+  return useQuery({ queryKey: queryKeys.moments, queryFn: () => api.moments(), enabled: active, staleTime: 2_000, refetchInterval: active ? 4_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useMoment(momentId: string | null) {
-  return useQuery({ queryKey: queryKeys.moment(momentId ?? ""), queryFn: () => api.moment(momentId ?? ""), enabled: Boolean(momentId), retry: 1 })
+  return useQuery({ queryKey: queryKeys.moment(momentId ?? ""), queryFn: () => api.moment(momentId ?? ""), enabled: Boolean(momentId), staleTime: 2_000, refetchInterval: momentId ? 4_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useSettings(active = true) {
-  return useQuery({ queryKey: queryKeys.settings, queryFn: api.settings, enabled: active, retry: false })
+  return useQuery({ queryKey: queryKeys.settings, queryFn: api.settings, enabled: active, staleTime: 2_000, refetchInterval: active ? 5_000 : false, refetchIntervalInBackground: false, retry: 1 })
 }
 
 export function useInvalidateWorkspace() {
   const queryClient = useQueryClient()
-  return () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.me })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.moments })
-    void queryClient.invalidateQueries({ queryKey: ["moment"] })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+  return async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.me }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.moments }),
+      queryClient.invalidateQueries({ queryKey: ["moment"] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings }),
+    ])
   }
 }
 
 export function useWorkspaceMutation<TVariables, TResult>(mutationFn: (variables: TVariables) => Promise<TResult>) {
   const invalidate = useInvalidateWorkspace()
-  return useMutation({ mutationFn, onSuccess: invalidate })
+  return useMutation({ mutationFn, onSuccess: async () => invalidate() })
 }

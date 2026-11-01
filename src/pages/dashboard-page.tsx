@@ -3,12 +3,13 @@ import { useMemo, useState } from "react"
 import { MomentDetail } from "@/components/dashboard/moment-detail"
 import { MomentCard } from "@/components/dashboard/moment-card"
 import { MetricCard } from "@/components/dashboard/metric-card"
+import { Feedback, RequestError } from "@/components/shared/feedback"
 import { StatusPill } from "@/components/shared/status-pill"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ApiRequestError } from "@/lib/api"
-import { formatApproximateTime } from "@/lib/format"
+import { formatApproximateTime, statusLabel } from "@/lib/format"
 import { useDashboard, useMe, useMoments } from "@/hooks/use-momentmint"
 
 type SortMode = "time" | "support"
@@ -28,19 +29,21 @@ function DashboardPage() {
 
   if (me.isPending) return <LoadingState />
   if (me.isError && me.error instanceof ApiRequestError && me.error.status === 401) return <DisconnectedState />
-  if (me.isError) return <ErrorState message="We could not load your creator session." onRetry={() => void me.refetch()} />
+  if (me.isError) return <main className="max-w-2xl"><RequestError error={me.error} onRetry={() => void me.refetch()} title="We could not load your creator session" /></main>
 
   const dashboard = overview.data
-  const stale = overview.isStale || overview.isError
+  const stale = overview.isFetching || overview.isError
+  const eventSubReady = dashboard?.eventSub?.status === "enabled"
 
   return (
     <section aria-labelledby="dashboard-title" className="space-y-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div><Badge className="rounded-full" variant="outline">Creator workspace</Badge><h1 className="mt-3 font-heading text-4xl font-semibold tracking-tight sm:text-5xl" id="dashboard-title">Highlight inbox</h1><p className="mt-3 max-w-xl text-muted-foreground">Your community finds the moments. You decide what becomes a clip.</p></div>
-        <div className="flex items-center gap-2"><StatusPill value={dashboard?.connection.status ?? me.data?.connectionStatus} /><Button onClick={() => { void overview.refetch(); void moments.refetch() }} size="sm" type="button" variant="outline">Refresh</Button></div>
+        <div><Badge className="rounded-full" variant="outline">Live workspace</Badge><h1 className="mt-3 font-heading text-4xl font-semibold tracking-tight sm:text-5xl" id="dashboard-title">Moments</h1><p className="mt-3 max-w-xl text-muted-foreground">A focused inbox for the scenes your community wants you to keep.</p></div>
+        <div className="flex items-center gap-2"><StatusPill value={dashboard?.connection.status ?? me.data?.connectionStatus} /><Button onClick={() => { void overview.refetch(); void moments.refetch() }} size="sm" type="button" variant="outline">{overview.isFetching || moments.isFetching ? "Refreshing…" : "Refresh"}</Button></div>
       </div>
 
-      {overview.isError ? <ErrorState message="Live overview is unavailable. Your saved candidates are still shown below." onRetry={() => void overview.refetch()} /> : <>
+      {overview.isError ? <RequestError error={overview.error} onRetry={() => void overview.refetch()} title="Live workspace status is unavailable" /> : <>
+        {!eventSubReady && <Feedback action="Open connection" onAction={() => { window.location.href = "/connect" }} title="Chat listening is not ready" tone="info">Connect EventSub before expecting new !moment nominations. Your saved moments are still safe.</Feedback>}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard label="Connection" value={dashboard?.connection.status === "CONNECTED" ? dashboard.connection.displayName : "Reconnect needed"} />
           <MetricCard label="Stream" value={dashboard?.stream?.status ?? "Waiting"} />
@@ -48,7 +51,7 @@ function DashboardPage() {
           <MetricCard label="Candidates" value={String(dashboard?.metrics.moments ?? 0)} />
           <MetricCard label="Clips ready" value={String(dashboard?.metrics.readyClips ?? 0)} />
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><span>{dashboard?.eventSub ? `EventSub: ${dashboard.eventSub.status}` : "EventSub is not registered"}</span><span aria-hidden="true">•</span><span>{dashboard?.metrics.processingClips ?? 0} clip job{dashboard?.metrics.processingClips === 1 ? "" : "s"} processing</span><span aria-live="polite" className={stale ? "text-destructive" : "text-primary"}>{stale ? "Data may be stale" : `Updated ${dashboard ? formatApproximateTime(dashboard.lastUpdatedAt) : "just now"}`}</span></div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><span>{dashboard?.eventSub ? `Chat listening: ${statusLabel(dashboard.eventSub.status)}` : "Chat listening is not set up"}</span><span aria-hidden="true">•</span><span>{dashboard?.metrics.processingClips ?? 0} clip job{dashboard?.metrics.processingClips === 1 ? "" : "s"} processing</span><span aria-live="polite" className={stale ? "text-muted-foreground" : "text-primary"}>{overview.isFetching ? "Updating…" : overview.isError ? "Update unavailable" : `Updated ${dashboard ? formatApproximateTime(dashboard.lastUpdatedAt) : "just now"}`}</span></div>
       </>}
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(25rem,1.1fr)]">
@@ -56,7 +59,7 @@ function DashboardPage() {
           <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Community candidates</CardTitle><CardDescription className="mt-1">Distinct viewers count once per approximate moment.</CardDescription></div><div className="flex gap-1" aria-label="Sort candidates"><Button aria-pressed={sortMode === "time"} onClick={() => setSortMode("time")} size="sm" type="button" variant={sortMode === "time" ? "secondary" : "ghost"}>Newest</Button><Button aria-pressed={sortMode === "support"} onClick={() => setSortMode("support")} size="sm" type="button" variant={sortMode === "support" ? "secondary" : "ghost"}>Support</Button></div></CardHeader>
           <CardContent className="grid gap-3">
             {moments.isPending && <p className="rounded-xl bg-muted/40 p-5 text-sm text-muted-foreground">Loading candidates…</p>}
-            {moments.isError && <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">Candidates could not be loaded. Try refresh.</p>}
+            {moments.isError && <RequestError error={moments.error} onRetry={() => void moments.refetch()} title="Moments could not be loaded" />}
             {!moments.isPending && !moments.isError && sortedMoments.length === 0 && <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="font-medium">No moments yet</p><p className="mt-2 text-sm leading-6 text-muted-foreground">When viewers type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">!moment</code>, nearby nominations will appear here. One viewer cannot inflate the count by repeating the command.</p></div>}
             {sortedMoments.map((moment) => <MomentCard key={moment.id} moment={moment} onSelect={() => setSelectedMomentId(moment.id)} selected={selectedMomentId === moment.id} />)}
           </CardContent>
@@ -69,8 +72,6 @@ function DashboardPage() {
 
 function LoadingState() { return <section aria-live="polite" className="grid gap-4"><div className="h-10 w-64 animate-pulse rounded bg-muted" /><div className="grid gap-3 sm:grid-cols-3"><div className="h-24 animate-pulse rounded-2xl bg-muted" /><div className="h-24 animate-pulse rounded-2xl bg-muted" /><div className="h-24 animate-pulse rounded-2xl bg-muted" /></div><p className="text-sm text-muted-foreground">Loading your creator workspace…</p></section> }
 
-function DisconnectedState() { return <section className="max-w-xl space-y-4"><Badge variant="outline">Connection required</Badge><h1 className="font-heading text-4xl font-semibold tracking-tight">Connect Twitch to open your inbox.</h1><p className="leading-7 text-muted-foreground">MomentMint needs your creator session to show nominations, EventSub status, clip jobs, and editable metadata.</p><Button render={<a href="/oauth/twitch/start" />}>Connect Twitch</Button></section> }
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) { return <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"><span>{message}</span><Button onClick={onRetry} size="sm" type="button" variant="outline">Try again</Button></div> }
+function DisconnectedState() { return <section className="max-w-xl space-y-5"><Badge variant="outline">Connection required</Badge><h1 className="font-heading text-4xl font-semibold tracking-tight">Connect Twitch to open your moments.</h1><p className="leading-7 text-muted-foreground">Your inbox is private to your connected creator account. Connect Twitch first, then MomentMint will show you the next setup step.</p><Button render={<a href="/oauth/twitch/start" />}>Connect Twitch</Button></section> }
 
 export { DashboardPage }
