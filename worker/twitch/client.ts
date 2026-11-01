@@ -172,7 +172,7 @@ export type TwitchClipRecord = {
   url: string
   embed_url: string
   title: string
-  thumbnail_url: string
+  thumbnail_url: string | null
   duration: number
   broadcaster_id: string
   vod_offset: number | null
@@ -191,8 +191,12 @@ export const getClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; T
   const body = await twitchResponse<{ data?: TwitchClipRecord[] }>(response)
   const clip = body.data?.[0] ?? null
   if (clip) {
-    const invalidFields = (["url", "embed_url", "thumbnail_url"] as const).filter((field) => !isTrustedTwitchUrl(clip[field])).map((field) => `${field}:${twitchUrlHost(clip[field])}`)
+    const invalidFields = (["url", "embed_url"] as const).filter((field) => !isTrustedTwitchUrl(clip[field])).map((field) => `${field}:${twitchUrlHost(clip[field])}`)
     if (invalidFields.length > 0) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false, invalidFields.join(","))
+    // Twitch may serve thumbnails from a rotating CDN hostname. The thumbnail
+    // is optional; never persist an untrusted image URL, but keep the verified
+    // clip and embed URLs usable for review.
+    if (clip.thumbnail_url && !isTrustedTwitchUrl(clip.thumbnail_url)) return { ...clip, thumbnail_url: null }
   }
   return clip
 }

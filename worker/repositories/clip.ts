@@ -48,7 +48,7 @@ export const claimClipJob = (db: D1Database, clipJobId: string) =>
 export const saveClipCreation = (db: D1Database, clipJobId: string, input: { clipId: string; editUrlCiphertext: string; editUrlIv: string; deadline: string }) =>
   db.prepare("UPDATE clip_jobs SET status = 'VERIFYING', twitch_clip_id = ?1, edit_url_ciphertext = ?2, edit_url_iv = ?3, verify_deadline_at = ?4, error_code = NULL, updated_at = ?5 WHERE id = ?6 AND status = 'CREATING'").bind(input.clipId, input.editUrlCiphertext, input.editUrlIv, input.deadline, nowIso(), clipJobId).run()
 
-export const saveClipVerification = (db: D1Database, clipJobId: string, input: { clipUrl: string; embedUrl: string; thumbnailUrl: string; title: string; duration: number; verifiedAt: string }) =>
+export const saveClipVerification = (db: D1Database, clipJobId: string, input: { clipUrl: string; embedUrl: string; thumbnailUrl: string | null; title: string; duration: number; verifiedAt: string }) =>
   db.prepare("UPDATE clip_jobs SET status = 'READY_FOR_REVIEW', clip_url = ?1, embed_url = ?2, thumbnail_url = ?3, clip_title = ?4, clip_duration_seconds = ?5, verified_at = ?6, error_code = NULL, updated_at = ?6 WHERE id = ?7 AND status = 'VERIFYING'").bind(input.clipUrl, input.embedUrl, input.thumbnailUrl, input.title, input.duration, input.verifiedAt, clipJobId).run()
 
 export const markClipJob = (db: D1Database, clipJobId: string, status: ClipJobRow["status"], errorCode?: string) =>
