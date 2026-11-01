@@ -26,7 +26,7 @@ const twitchUrlHost = (value: string) => {
 // Webhook EventSub subscriptions are created with an app access token. For
 // channel.chat.message, Twitch also requires the chatting user's bot scope and
 // the broadcaster's bot scope in addition to chat-read permission.
-export const requiredScopes = ["user:read:chat", "user:bot", "channel:bot", "clips:edit"] as const
+export const requiredScopes = ["user:read:chat", "user:bot", "channel:bot", "channel:manage:clips"] as const
 
 export class TwitchApiError extends Error {
   readonly status: number
@@ -178,8 +178,39 @@ export type TwitchClipRecord = {
   vod_offset: number | null
 }
 
-export const createClip = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator) => {
-  const response = await authorizedFetch(env, creator, `/clips?broadcaster_id=${encodeURIComponent(creator.twitch_user_id)}`, { method: "POST" })
+type TwitchVideoRecord = {
+  id: string
+  created_at: string
+  type: string
+  duration: string
+}
+
+const parseTwitchDuration = (value: string) => {
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/.exec(value)
+  if (!match) return null
+  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)
+}
+
+export const calculateVodClipWindow = (anchorEventsubAt: string, vodCreatedAt: string, durationSeconds = 30) => {
+  const anchorMs = Date.parse(anchorEventsubAt)
+  const vodCreatedMs = Date.parse(vodCreatedAt)
+  if (!Number.isFinite(anchorMs) || !Number.isFinite(vodCreatedMs) || anchorMs < vodCreatedMs) return null
+  const anchorOffset = (anchorMs - vodCreatedMs) / 1000
+  return { durationSeconds, vodOffset: Math.max(durationSeconds, Math.floor(anchorOffset + durationSeconds / 2)) }
+}
+
+export const createClipFromMoment = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator, anchorEventsubAt: string) => {
+  const videosResponse = await authorizedFetch(env, creator, `/videos?user_id=${encodeURIComponent(creator.twitch_user_id)}&type=archive&first=5`)
+  const videos = await twitchResponse<{ data?: TwitchVideoRecord[] }>(videosResponse)
+  const anchorMs = Date.parse(anchorEventsubAt)
+  const video = videos.data?.filter((candidate) => candidate.type === "archive" && Date.parse(candidate.created_at) <= anchorMs).sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0]
+  if (!video) throw new TwitchApiError(404, "TWITCH_VOD_NOT_FOUND", true)
+  const window = calculateVodClipWindow(anchorEventsubAt, video.created_at)
+  if (!window) throw new TwitchApiError(400, "TWITCH_VOD_OFFSET_INVALID", true)
+  const availableDuration = parseTwitchDuration(video.duration)
+  if (availableDuration !== null && availableDuration > 0 && window.vodOffset > availableDuration) throw new TwitchApiError(409, "TWITCH_VOD_NOT_READY", true)
+  const query = new URLSearchParams({ broadcaster_id: creator.twitch_user_id, editor_id: creator.twitch_user_id, vod_id: video.id, vod_offset: String(window.vodOffset), duration: String(window.durationSeconds), title: "MomentMint highlight" })
+  const response = await authorizedFetch(env, creator, `/videos/clips?${query.toString()}`, { method: "POST" })
   const body = await twitchResponse<{ data?: [{ id?: string; edit_url?: string }] }>(response)
   const created = body.data?.[0]
   if (!created?.id || !created.edit_url || !isTrustedTwitchUrl(created.edit_url)) throw new TwitchApiError(200, "TWITCH_UNTRUSTED_CLIP_URL", false, `edit_url:${created?.edit_url ? twitchUrlHost(created.edit_url) : "missing"}`)

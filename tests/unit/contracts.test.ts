@@ -5,7 +5,7 @@ import { decryptSecret, encryptSecret, hmacSha256Hex } from "../../worker/lib/cr
 import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/nomination.js"
 import { buildMetadataPrompt, fallbackMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
 import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
-import { isTrustedTwitchUrl } from "../../worker/twitch/client.js"
+import { calculateVodClipWindow, isTrustedTwitchUrl } from "../../worker/twitch/client.js"
 import { parseCookies } from "../../worker/lib/cookies.js"
 
 describe("MomentMint contracts", () => {
@@ -61,6 +61,11 @@ describe("MomentMint contracts", () => {
     expect(isTrustedTwitchUrl("https://static-cdn.jtvnw.net/example.jpg")).toBe(true)
     expect(isTrustedTwitchUrl("http://clips.twitch.tv/example")).toBe(false)
     expect(isTrustedTwitchUrl("https://evil-twitch.tv/example")).toBe(false)
+  })
+
+  it("targets the nominated moment inside the matching VOD", () => {
+    expect(calculateVodClipWindow("2026-11-01T07:00:45.000Z", "2026-11-01T07:00:00.000Z")).toEqual({ durationSeconds: 30, vodOffset: 60 })
+    expect(calculateVodClipWindow("2026-11-01T06:59:59.000Z", "2026-11-01T07:00:00.000Z")).toBeNull()
   })
 
   it("accepts only channel chat EventSub payloads and tolerates malformed cookies", () => {

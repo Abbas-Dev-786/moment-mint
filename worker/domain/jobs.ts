@@ -3,7 +3,7 @@ import { creatorSettings, updateCreatorStatus } from "../repositories/creator.js
 import { claimClipJob, findClipJobWithCreator, markClipJob, saveClipCreation, saveClipVerification } from "../repositories/clip.js"
 import { findMetadataForCreator, upsertMetadataForCreator } from "../repositories/metadata.js"
 import { findMomentWithCreator } from "../repositories/moment.js"
-import { createClip, getClip, TwitchApiError } from "../twitch/client.js"
+import { createClipFromMoment, getClip, TwitchApiError } from "../twitch/client.js"
 import { generateMetadata, AI_PROMPT_VERSION } from "../ai/metadata.js"
 import type { QueueMessage } from "../../shared/contracts/domain.js"
 
@@ -60,7 +60,7 @@ export const processCreateClip = async (clipJobId: string, env: JobEnv) => {
     return
   }
   try {
-    const created = await createClip(env, creator)
+    const created = await createClipFromMoment(env, creator, job.anchor_eventsub_at)
     const edit = await encryptSecret(created.editUrl, env.TOKEN_ENCRYPTION_KEY)
     const deadline = new Date(Date.now() + 15_000).toISOString()
     const saved = await saveClipCreation(env.DB, clipJobId, { clipId: created.id, editUrlCiphertext: edit.ciphertext, editUrlIv: edit.iv, deadline })
