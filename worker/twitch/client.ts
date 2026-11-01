@@ -9,7 +9,7 @@ const TWITCH_OAUTH = "https://id.twitch.tv/oauth2"
 export const isTrustedTwitchUrl = (value: string) => {
   try {
     const url = new URL(value)
-    return url.protocol === "https:" && (url.hostname === "twitch.tv" || url.hostname.endsWith(".twitch.tv"))
+    return url.protocol === "https:" && (url.hostname === "twitch.tv" || url.hostname.endsWith(".twitch.tv") || url.hostname === "static-cdn.jtvnw.net")
   } catch {
     return false
   }

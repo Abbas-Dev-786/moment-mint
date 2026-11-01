@@ -58,6 +58,7 @@ describe("MomentMint contracts", () => {
   it("allows only HTTPS Twitch-hosted clip URLs", () => {
     expect(isTrustedTwitchUrl("https://clips.twitch.tv/example")).toBe(true)
     expect(isTrustedTwitchUrl("https://clips-media-assets2.twitch.tv/example.jpg")).toBe(true)
+    expect(isTrustedTwitchUrl("https://static-cdn.jtvnw.net/example.jpg")).toBe(true)
     expect(isTrustedTwitchUrl("http://clips.twitch.tv/example")).toBe(false)
     expect(isTrustedTwitchUrl("https://evil-twitch.tv/example")).toBe(false)
   })
