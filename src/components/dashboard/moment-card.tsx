@@ -12,8 +12,8 @@ function MomentCard({ moment, selected, onSelect }: { moment: MomentSummary; sel
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-medium">Community moment</p>
-          <p className="mt-1 text-sm text-muted-foreground">Approx. {formatApproximateTime(moment.anchor_eventsub_at)}. {moment.unique_nominator_count} of {moment.threshold_required} viewers.</p>
+          <p className="font-medium">Moment at {formatApproximateTime(moment.anchor_eventsub_at)}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{moment.unique_nominator_count} of {moment.threshold_required} viewers nominated this moment.</p>
         </div>
         <StatusPill value={moment.status} />
       </div>

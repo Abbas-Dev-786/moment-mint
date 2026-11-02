@@ -27,6 +27,16 @@ function DashboardPage() {
     return rows.sort((left, right) => sortMode === "support" ? right.unique_nominator_count - left.unique_nominator_count : right.anchor_eventsub_at.localeCompare(left.anchor_eventsub_at))
   }, [moments.data, sortMode])
 
+  const streamGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; title: string | null; category: string | null; startedAt: string | null; status: string; moments: typeof sortedMoments }>()
+    for (const moment of sortedMoments) {
+      const current = groups.get(moment.stream_session_id)
+      if (current) current.moments.push(moment)
+      else groups.set(moment.stream_session_id, { id: moment.stream_session_id, title: moment.stream_title, category: moment.stream_category_name, startedAt: moment.stream_started_at, status: moment.stream_status, moments: [moment] })
+    }
+    return Array.from(groups.values())
+  }, [sortedMoments])
+
   if (me.isPending) return <LoadingState />
   if (me.isError && me.error instanceof ApiRequestError && me.error.status === 401) return <DisconnectedState />
   if (me.isError) return <main className="max-w-2xl"><RequestError error={me.error} onRetry={() => void me.refetch()} title="We could not load your creator session" /></main>
@@ -56,12 +66,12 @@ function DashboardPage() {
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(25rem,1.1fr)]">
         <Card>
-          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Community candidates</CardTitle><CardDescription className="mt-1">Distinct viewers count once per approximate moment.</CardDescription></div><div className="flex gap-1" aria-label="Sort candidates"><Button aria-pressed={sortMode === "time"} onClick={() => setSortMode("time")} size="sm" type="button" variant={sortMode === "time" ? "secondary" : "ghost"}>Newest</Button><Button aria-pressed={sortMode === "support"} onClick={() => setSortMode("support")} size="sm" type="button" variant={sortMode === "support" ? "secondary" : "ghost"}>Support</Button></div></CardHeader>
+          <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Community candidates</CardTitle><CardDescription className="mt-1">Grouped by broadcast so every clip stays in the stream where it happened.</CardDescription></div><div className="flex gap-1" aria-label="Sort candidates"><Button aria-pressed={sortMode === "time"} onClick={() => setSortMode("time")} size="sm" type="button" variant={sortMode === "time" ? "secondary" : "ghost"}>Newest</Button><Button aria-pressed={sortMode === "support"} onClick={() => setSortMode("support")} size="sm" type="button" variant={sortMode === "support" ? "secondary" : "ghost"}>Support</Button></div></CardHeader>
           <CardContent className="grid gap-3">
             {moments.isPending && <p className="rounded-xl bg-muted/40 p-5 text-sm text-muted-foreground">Loading candidates…</p>}
             {moments.isError && <RequestError error={moments.error} onRetry={() => void moments.refetch()} title="Moments could not be loaded" />}
             {!moments.isPending && !moments.isError && sortedMoments.length === 0 && <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="font-medium">No moments yet</p><p className="mt-2 text-sm leading-6 text-muted-foreground">When viewers type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">!moment</code>, nearby nominations will appear here. One viewer cannot inflate the count by repeating the command.</p></div>}
-            {sortedMoments.map((moment) => <MomentCard key={moment.id} moment={moment} onSelect={() => setSelectedMomentId(moment.id)} selected={selectedMomentId === moment.id} />)}
+            {streamGroups.map((group) => <section aria-labelledby={`stream-${group.id}`} className="rounded-2xl border border-border/70 bg-card/35 p-3" key={group.id}><div className="flex items-start justify-between gap-3 rounded-xl bg-muted/35 p-4"><div className="min-w-0"><p className="text-xs font-medium tracking-wide text-primary">Broadcast session</p><h3 className="mt-1 truncate font-heading text-lg" id={`stream-${group.id}`}>{group.title || "Untitled stream"}</h3><p className="mt-1 text-sm text-muted-foreground">{group.category || "Category unavailable"} · Started {formatApproximateTime(group.startedAt)} · {group.moments.length} moment{group.moments.length === 1 ? "" : "s"}</p></div><StatusPill value={group.status} label={group.status === "UNKNOWN" ? "Stream recorded" : undefined} /></div><div className="mt-3 grid gap-3">{group.moments.map((moment) => <MomentCard key={moment.id} moment={moment} onSelect={() => setSelectedMomentId(moment.id)} selected={selectedMomentId === moment.id} />)}</div></section>)}
           </CardContent>
         </Card>
         {selectedMomentId ? <MomentDetail key={selectedMomentId} momentId={selectedMomentId} /> : <Card className="border-dashed"><CardContent className="grid min-h-80 place-items-center p-8 text-center"><div><div aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-full bg-primary/10 text-2xl text-primary">✦</div><h2 className="mt-4 font-heading text-xl">Choose a candidate</h2><p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Open a candidate to inspect its approximate timing, verified clip state, and editable metadata.</p></div></CardContent></Card>}
