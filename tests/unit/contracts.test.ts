@@ -10,6 +10,7 @@ import { CLIP_VERIFICATION_DEADLINE_SECONDS, MAX_CLIP_VERIFICATION_ATTEMPTS, sho
 import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
 import { calculateVodClipWindow, isTrustedTwitchUrl } from "../../worker/twitch/client.js"
 import { parseCookies } from "../../worker/lib/cookies.js"
+import { defaultSettings } from "../../worker/repositories/creator.js"
 
 describe("MomentMint contracts", () => {
   it("accepts only ID-based queue messages", () => {
@@ -19,9 +20,12 @@ describe("MomentMint contracts", () => {
   })
 
   it("preserves and validates safe creator defaults", () => {
-    const settings = creatorSettingsSchema.parse({ nominationCommand: "!moment", groupWindowSeconds: 30, uniqueViewerThreshold: 2, autoClipEnabled: false })
-    expect(settings.autoClipEnabled).toBe(false)
+    const settings = creatorSettingsSchema.parse({ nominationCommand: "!moment", groupWindowSeconds: 30, uniqueViewerThreshold: 1, autoClipEnabled: true })
+    expect(settings.uniqueViewerThreshold).toBe(1)
+    expect(settings.autoClipEnabled).toBe(true)
     expect(settings.communityContextEnabled).toBe(false)
+    expect(defaultSettings.uniqueViewerThreshold).toBe(1)
+    expect(defaultSettings.autoClipEnabled).toBe(true)
   })
 
   it("round trips AES-GCM secrets and rejects a wrong key", async () => {

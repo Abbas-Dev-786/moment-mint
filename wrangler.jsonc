@@ -29,7 +29,7 @@
 		"TWITCH_REDIRECT_URI": "https://moment-mint.abbasbhp787.workers.dev/oauth/twitch/callback",
 		"AI_MODEL_ID": "@cf/openai/gpt-oss-20b",
 		"DEFAULT_GROUP_WINDOW_SECONDS": "30",
-		"DEFAULT_UNIQUE_VIEWER_THRESHOLD": "2"
+		"DEFAULT_UNIQUE_VIEWER_THRESHOLD": "1"
 	},
 	"d1_databases": [
 		{

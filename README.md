@@ -14,9 +14,9 @@ Recommended demo path:
 
 1. Connect a Twitch broadcaster account.
 2. Open Settings and register EventSub chat listening.
-3. Send `!moment` in the broadcaster’s Twitch chat from one or more viewers.
+3. Send `!moment` in the broadcaster’s Twitch chat from one viewer; the default threshold is one distinct viewer.
 4. Open the dashboard and select the resulting community candidate.
-5. Create or retry the Twitch clip and wait for Twitch’s Get Clips confirmation.
+5. Automatic clipping starts when the threshold is met; wait for Twitch’s Get Clips confirmation.
 6. Generate AI metadata, review the evidence notice, edit the fields, and mark the candidate reviewed.
 
 The dashboard keeps candidates grouped under their broadcast so moments from separate streams do not get mixed together.
@@ -100,7 +100,7 @@ Editable AI metadata → creator review
 ### Verified Twitch clips
 
 - Manual clip creation with explicit creator confirmation.
-- Optional automatic clipping, disabled by default.
+- Automatic clipping is enabled by default and can be disabled in Settings.
 - Twitch clip creation is asynchronous and retryable.
 - A clip is not marked ready until Twitch confirms it through Get Clips.
 - VOD-not-ready conditions are retried within a bounded window.
@@ -387,7 +387,7 @@ Public Worker variables:
 | `TWITCH_REDIRECT_URI` | Exact OAuth callback URL |
 | `AI_MODEL_ID` | Workers AI model, currently `@cf/openai/gpt-oss-20b` |
 | `DEFAULT_GROUP_WINDOW_SECONDS` | Default nomination grouping window |
-| `DEFAULT_UNIQUE_VIEWER_THRESHOLD` | Default distinct-viewer threshold |
+| `DEFAULT_UNIQUE_VIEWER_THRESHOLD` | Default distinct-viewer threshold (`1`) |
 
 Secrets:
 

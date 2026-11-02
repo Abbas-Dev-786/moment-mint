@@ -13,7 +13,7 @@ const settingsPatchSchema = z.object({
   confirmAutoClip: z.boolean().optional(),
 }).strict()
 
-const disclosure = "Automatic clip creation is off by default. Twitch may publish a created clip according to Twitch's current behavior; review the clip and edit flow before enabling automation."
+const disclosure = "Automatic clip creation is enabled by default. Twitch may publish a created clip according to Twitch's current behavior; review the verified clip and edit flow before sharing. You can turn automation off at any time."
 
 export const getSettings = async (c: AuthContext) => {
   const creator = await findCreatorById(c.env.DB, c.get("creatorId"))

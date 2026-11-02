@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS creators (
   refresh_token_iv TEXT,
   token_expires_at TEXT,
   scopes_json TEXT NOT NULL DEFAULT '[]',
-  settings_json TEXT NOT NULL DEFAULT '{"nominationCommand":"!moment","groupWindowSeconds":30,"uniqueViewerThreshold":2,"autoClipEnabled":false,"communityContextEnabled":false}',
+  settings_json TEXT NOT NULL DEFAULT '{"nominationCommand":"!moment","groupWindowSeconds":30,"uniqueViewerThreshold":1,"autoClipEnabled":true,"communityContextEnabled":false}',
   connection_status TEXT NOT NULL DEFAULT 'DISCONNECTED' CHECK (connection_status IN ('CONNECTED','RECONNECT_REQUIRED','DISCONNECTED')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

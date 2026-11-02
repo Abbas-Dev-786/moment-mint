@@ -9,6 +9,9 @@ import { sendQueueMessage } from "./queue/contracts.js"
 import { deleteSubscription, listChatSubscriptions, registerChatSubscription, requiredScopes, TwitchApiError } from "./twitch/client.js"
 import type { AuthContext } from "./oauth.js"
 import { sanitizeChatText } from "./domain/chat-context.js"
+import type { CreatorRow } from "./repositories/creator.js"
+
+type EventSubEnv = { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string; APP_BASE_URL: string; EVENTSUB_SECRET?: string }
 
 const replayWindowMs = 10 * 60_000
 
@@ -90,11 +93,9 @@ export const webhook = async (c: Context<{ Bindings: AuthContext["env"] }>) => {
   return c.text("", 202)
 }
 
-export const registerEventSub = async (c: AuthContext) => {
-  const eventSubSecret = c.env.EVENTSUB_SECRET
-  if (!eventSubSecret) return c.json({ error: { code: "CONFIGURATION_ERROR", message: "EventSub secret is not configured." } }, 503)
-  const creator = await findCreatorById(c.env.DB, c.get("creatorId"))
-  if (!creator) return c.json({ error: { code: "NOT_FOUND", message: "Creator was not found." } }, 404)
+export const ensureCreatorEventSub = async (env: EventSubEnv, creator: CreatorRow) => {
+  const eventSubSecret = env.EVENTSUB_SECRET
+  if (!eventSubSecret) throw new TwitchApiError(503, "CONFIGURATION_ERROR", false, "EventSub secret is not configured.")
   let grantedScopes: string[] = []
   try {
     grantedScopes = JSON.parse(creator.scopes_json) as string[]
@@ -102,20 +103,27 @@ export const registerEventSub = async (c: AuthContext) => {
     grantedScopes = []
   }
   if (!requiredScopes.every((scope) => grantedScopes.includes(scope))) {
-    return c.json({ error: { code: "RECONNECT_REQUIRED", message: "Reconnect Twitch and approve the chat bot permissions before registering EventSub." } }, 401)
+    throw new TwitchApiError(401, "RECONNECT_REQUIRED", false, "Required chat permissions are missing.")
   }
+  const existing = await listChatSubscriptions(env, creator.twitch_user_id)
+  const callback = `${env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`
+  const matching = existing.data.find((subscription) => subscription.type === "channel.chat.message" && subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && subscription.status === "enabled")
+  const pending = existing.data.find((subscription) => subscription.type === "channel.chat.message" && subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && subscription.status === "webhook_callback_verification_pending")
+  if (pending) await deleteSubscription(env, pending.id)
+  const result = matching
+    ? { data: [{ id: matching.id, status: matching.status, condition: matching.condition }] }
+    : await registerChatSubscription({ ...env, EVENTSUB_SECRET: eventSubSecret }, creator)
+  const subscription = result.data[0]
+  await saveSubscription(env.DB, { creatorId: creator.id, twitchId: subscription.id, status: subscription.status, condition: subscription.condition })
+  return { id: subscription.id, status: subscription.status, type: "channel.chat.message" as const }
+}
+
+export const registerEventSub = async (c: AuthContext) => {
+  const creator = await findCreatorById(c.env.DB, c.get("creatorId"))
+  if (!creator) return c.json({ error: { code: "NOT_FOUND", message: "Creator was not found." } }, 404)
   try {
-    const existing = await listChatSubscriptions(c.env, creator.twitch_user_id)
-    const callback = `${c.env.APP_BASE_URL.replace(/\/$/, "")}/webhooks/twitch`
-    const matching = existing.data.find((subscription) => subscription.type === "channel.chat.message" && subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && subscription.status === "enabled")
-    const pending = existing.data.find((subscription) => subscription.type === "channel.chat.message" && subscription.condition.broadcaster_user_id === creator.twitch_user_id && subscription.condition.user_id === creator.twitch_user_id && subscription.transport?.method === "webhook" && subscription.transport.callback === callback && subscription.status === "webhook_callback_verification_pending")
-    if (pending) await deleteSubscription(c.env, pending.id)
-    const result = matching
-      ? { data: [{ id: matching.id, status: matching.status, condition: matching.condition }] }
-      : await registerChatSubscription({ ...c.env, EVENTSUB_SECRET: eventSubSecret }, creator)
-    const subscription = result.data[0]
-    await saveSubscription(c.env.DB, { creatorId: creator.id, twitchId: subscription.id, status: subscription.status, condition: subscription.condition })
-    return c.json({ data: { id: subscription.id, status: subscription.status, type: "channel.chat.message" } })
+    const subscription = await ensureCreatorEventSub(c.env, creator)
+    return c.json({ data: subscription })
   } catch (error) {
     const apiError = error instanceof TwitchApiError ? error : null
     console.error("EventSub registration failed", { creatorId: creator.id, status: apiError?.status ?? 0, code: apiError?.code ?? (error instanceof Error ? error.message : "unknown"), upstreamMessage: apiError?.upstreamMessage ?? null })

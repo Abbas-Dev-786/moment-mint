@@ -3,11 +3,12 @@ import { creatorSettings } from "./repositories/creator.js"
 import { consumeOAuthState, createOAuthState, createSession, deleteSession, findSessionCreatorId } from "./repositories/auth.js"
 import { findCreatorById, upsertCreator } from "./repositories/creator.js"
 import { disableCreatorSubscriptions, findSubscriptionForCreator } from "./repositories/eventsub.js"
-import { deleteSubscription, exchangeCode, revokeToken, requiredScopes, validateToken } from "./twitch/client.js"
+import { deleteSubscription, exchangeCode, revokeToken, requiredScopes, validateToken, TwitchApiError } from "./twitch/client.js"
 import { constantTimeEqual, decryptSecret, encryptSecret, sha256Base64, signValue } from "./lib/crypto.js"
 import { expiredOAuthFlowCookie, expiredSessionCookie, oauthFlowCookie, OAUTH_FLOW_COOKIE, parseCookies, SESSION_COOKIE, sessionCookie } from "./lib/cookies.js"
 import type { AppBindings } from "./env.js"
 import { deleteCreatorChatContext } from "./domain/chat-context.js"
+import { ensureCreatorEventSub } from "./eventsub.js"
 
 type AuthEnv = { Bindings: AppBindings; Variables: { creatorId: string } }
 type AuthContext = Context<AuthEnv>
@@ -71,6 +72,12 @@ export const oauthCallback = async (c: AuthContext) => {
     const refresh = await encryptSecret(token.refresh_token, c.env.TOKEN_ENCRYPTION_KEY)
     const creator = await upsertCreator(c.env.DB, { twitchUserId: validated.user_id, login: validated.login, displayName: validated.login, accessTokenCiphertext: access.ciphertext, accessTokenIv: access.iv, refreshTokenCiphertext: refresh.ciphertext, refreshTokenIv: refresh.iv, tokenExpiresAt: new Date(Date.now() + token.expires_in * 1000).toISOString(), scopes: validated.scopes })
     if (!creator) throw new Error("CREATOR_UPSERT_FAILED")
+    try {
+      const subscription = await ensureCreatorEventSub(c.env, creator)
+      console.info("Twitch EventSub restored after OAuth", { creatorId: creator.id, status: subscription.status })
+    } catch (error) {
+      console.error("Twitch EventSub restore after OAuth failed", { creatorId: creator.id, code: error instanceof TwitchApiError ? error.code : error instanceof Error ? error.message : "unknown" })
+    }
     const sessionId = await createSession(c.env.DB, creator.id, new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString())
     const response = c.redirect("/dashboard", 302)
     response.headers.append("Set-Cookie", sessionCookie(await sessionValue(sessionId, c.env.SESSION_SECRET), new URL(c.req.url).protocol === "https:"))

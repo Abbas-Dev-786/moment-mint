@@ -69,7 +69,7 @@ function DashboardPage() {
       </div>
 
       {overview.isError ? <RequestError error={overview.error} onRetry={() => void overview.refetch()} title="Live workspace status is unavailable" /> : <>
-        {!eventSubReady && <Feedback action="Open connection" onAction={() => { window.location.href = "/connect" }} title="Chat listening is not ready" tone="info">Connect EventSub before expecting new !moment nominations. Your saved moments are still safe.</Feedback>}
+        {!eventSubReady && <Feedback action="Open connection" onAction={() => { window.location.href = "/connect" }} title="Chat listening is not ready" tone="info">{dashboard?.connection.status === "CONNECTED" ? "Twitch is connected, but chat listening still needs to be restored. Open the Connection Center before expecting new !moment nominations." : "Connect Twitch and turn on chat listening before expecting new !moment nominations."} Your saved moments are still safe.</Feedback>}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard label="Connection" value={dashboard?.connection.status === "CONNECTED" ? dashboard.connection.displayName : "Reconnect needed"} />
           <MetricCard label="Current stream" value={currentStreamLabel} />

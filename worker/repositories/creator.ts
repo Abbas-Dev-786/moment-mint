@@ -19,8 +19,8 @@ export type CreatorRow = {
 export const defaultSettings: CreatorSettings = {
   nominationCommand: "!moment",
   groupWindowSeconds: 30,
-  uniqueViewerThreshold: 2,
-  autoClipEnabled: false,
+  uniqueViewerThreshold: 1,
+  autoClipEnabled: true,
   communityContextEnabled: false,
 }
 
