@@ -6,6 +6,7 @@ import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/no
 import { buildMetadataPrompt, fallbackMetadata, isGroundedMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
 import { CHAT_CONTEXT_AFTER_SECONDS, CHAT_CONTEXT_BEFORE_SECONDS, contextConfidenceFallback, contextEvidenceFallback, contextRetentionExpiry, chatContextWindow, sanitizeChatText } from "../../worker/domain/chat-context.js"
 import { safeEventPayload } from "../../worker/eventsub.js"
+import { CLIP_VERIFICATION_DEADLINE_SECONDS, MAX_CLIP_VERIFICATION_ATTEMPTS, shouldRetryClipCreation } from "../../worker/domain/jobs.js"
 import { canTransitionClipJob, canTransitionMoment } from "../../shared/contracts/states.js"
 import { calculateVodClipWindow, isTrustedTwitchUrl } from "../../worker/twitch/client.js"
 import { parseCookies } from "../../worker/lib/cookies.js"
@@ -102,6 +103,15 @@ describe("MomentMint contracts", () => {
   it("targets the nominated moment inside the matching VOD", () => {
     expect(calculateVodClipWindow("2026-11-01T07:00:45.000Z", "2026-11-01T07:00:00.000Z")).toEqual({ durationSeconds: 30, vodOffset: 60 })
     expect(calculateVodClipWindow("2026-11-01T06:59:59.000Z", "2026-11-01T07:00:00.000Z")).toBeNull()
+  })
+
+  it("keeps live VOD clip creation retryable only inside a bounded window", () => {
+    const startedAt = "2026-11-01T07:00:00.000Z"
+    const startedMs = Date.parse(startedAt)
+    expect(shouldRetryClipCreation("TWITCH_VOD_NOT_READY", startedAt, startedMs + 30_000)).toBe(true)
+    expect(shouldRetryClipCreation("TWITCH_VOD_NOT_READY", startedAt, startedMs + CLIP_VERIFICATION_DEADLINE_SECONDS * 1000 + 1)).toBe(false)
+    expect(shouldRetryClipCreation("TWITCH_NETWORK_ERROR", startedAt, startedMs + 30_000)).toBe(false)
+    expect(MAX_CLIP_VERIFICATION_ATTEMPTS).toBe(5)
   })
 
   it("accepts only channel chat EventSub payloads and tolerates malformed cookies", () => {

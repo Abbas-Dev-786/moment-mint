@@ -43,7 +43,10 @@ export const updateClipJobStatus = (db: D1Database, creatorId: string, clipJobId
   db.prepare("UPDATE clip_jobs SET status = ?1, error_code = ?2, updated_at = ?3 WHERE id = ?4 AND creator_id = ?5").bind(status, errorCode ?? null, nowIso(), clipJobId, creatorId).run()
 
 export const claimClipJob = (db: D1Database, clipJobId: string) =>
-  db.prepare("UPDATE clip_jobs SET status = 'CREATING', request_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'QUEUED'").bind(nowIso(), clipJobId).run()
+  db.prepare("UPDATE clip_jobs SET status = 'CREATING', request_at = COALESCE(request_at, ?1), updated_at = ?1 WHERE id = ?2 AND status = 'QUEUED'").bind(nowIso(), clipJobId).run()
+
+export const requeueClipJob = (db: D1Database, clipJobId: string, errorCode?: string) =>
+  db.prepare("UPDATE clip_jobs SET status = 'QUEUED', error_code = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'CREATING'").bind(errorCode ?? null, nowIso(), clipJobId).run()
 
 export const saveClipCreation = (db: D1Database, clipJobId: string, input: { clipId: string; editUrlCiphertext: string; editUrlIv: string; deadline: string }) =>
   db.prepare("UPDATE clip_jobs SET status = 'VERIFYING', twitch_clip_id = ?1, edit_url_ciphertext = ?2, edit_url_iv = ?3, verify_deadline_at = ?4, error_code = NULL, updated_at = ?5 WHERE id = ?6 AND status = 'CREATING'").bind(input.clipId, input.editUrlCiphertext, input.editUrlIv, input.deadline, nowIso(), clipJobId).run()

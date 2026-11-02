@@ -39,7 +39,7 @@ export const errorLabel = (value: string | null | undefined) => {
     CLIP_NOT_RETRIEVABLE: "Twitch has not published the clip yet. Try again in a moment.",
     AUTO_CLIP_DISABLED: "Automatic clips are turned off in Settings.",
     TWITCH_VOD_NOT_FOUND: "The stream recording is not available yet. Try again shortly.",
-    TWITCH_VOD_NOT_READY: "The stream recording has not reached that moment yet. Try again shortly.",
+    TWITCH_VOD_NOT_READY: "Twitch’s live recording is still catching up. MomentMint retries briefly; if it remains unavailable, try this candidate again shortly.",
     RECONNECT_REQUIRED: "Reconnect Twitch so MomentMint can refresh its permissions.",
     CREATOR_NOT_FOUND: "The Twitch connection is no longer available. Reconnect Twitch.",
   }
