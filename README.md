@@ -21,6 +21,48 @@ Recommended demo path:
 
 The dashboard keeps candidates grouped under their broadcast so moments from separate streams do not get mixed together.
 
+## How streamers and their Twitch communities use MomentMint
+
+MomentMint is designed around a simple shared behavior: the community spots the moment, and the streamer decides what happens next.
+
+### During the stream: the community signals the moment
+
+When viewers see something worth saving, they type:
+
+```text
+!moment
+```
+
+MomentMint listens to the broadcaster’s Twitch chat through EventSub. It groups nearby nominations into one candidate and counts distinct viewers, so one person repeating the command cannot inflate the signal. A single nomination is still retained as a candidate; additional viewers simply increase its support.
+
+The community does not need access to the dashboard, clip controls, or creator account. Their role is lightweight: keep watching, recognize a memorable moment, and nominate it in chat.
+
+### After the stream: the streamer reviews the inbox
+
+The streamer opens MomentMint’s dashboard to see candidates grouped under the broadcast where they happened. Each candidate shows its approximate nomination time, viewer support, clip status, and AI metadata status.
+
+The streamer can then:
+
+1. Open a candidate and inspect the verified Twitch clip.
+2. Retry the clip if Twitch’s live recording was still catching up.
+3. Generate editable title, summary, category, and social caption suggestions.
+4. Review the evidence notice and edit every field before sharing.
+5. Open Twitch’s edit flow or mark the candidate reviewed/dismissed.
+
+### The collaboration loop
+
+```mermaid
+flowchart LR
+    Community[Community watches stream] --> Nominate[Viewer types !moment]
+    Nominate --> Candidate[MomentMint creates a supported candidate]
+    Candidate --> Inbox[Streamer sees it in the broadcast inbox]
+    Inbox --> Review[Streamer verifies, edits, and decides]
+    Review --> Share[Streamer chooses how to share]
+    Share -. feedback .-> Community
+```
+
+This keeps the community involved without giving automated systems permission to publish on the streamer’s behalf. The audience supplies discovery and enthusiasm; the streamer supplies context, judgment, and final approval.
+
 ## Why MomentMint?
 
 Great stream moments are often discovered by the audience before the streamer notices them. Existing workflows make the creator manually search chat, remember timestamps, create clips, wait for Twitch publication, and write social copy.
@@ -401,31 +443,6 @@ For a real Twitch validation, verify OAuth, EventSub registration, a chat nomina
 | `PATCH /api/settings` | Update creator settings |
 
 All `/api/*` routes are creator-authenticated and creator-scoped.
-
-## MVP boundaries
-
-MomentMint intentionally does not include:
-
-- Automatic social publishing.
-- Video downloading, storage, or editing.
-- Computer vision or AI video watching.
-- Multi-channel team workspaces.
-- Gamification or viewer leaderboards.
-- Guaranteed frame-perfect timestamps; EventSub timing is an approximate anchor.
-
-These boundaries keep the hackathon prototype focused on a reliable, transparent path from community signal to creator-approved highlight.
-
-## Known limitations
-
-- Twitch controls clip publication and edit-link availability; MomentMint waits for Twitch confirmation.
-- A stream title/category cannot be recovered for historical offline sessions if it was never captured while the stream was live.
-- Workers AI suggestions remain editable and should be reviewed before sharing.
-- Community context is opt-in and may be unavailable when no usable chat messages were captured around a nomination.
-- Full end-to-end Twitch validation requires a real broadcaster account, public HTTPS Worker, Twitch application, and configured Cloudflare resources.
-
-## Responsible AI note
-
-MomentMint uses AI to draft metadata, not to decide what happened in a video. The model is told it has not watched the clip, chat is treated as untrusted evidence, generated fields are schema-validated, unsupported claims are rejected, and deterministic fallback metadata is retained when AI is unavailable. The creator always reviews and controls the final text.
 
 ## License and hackathon note
 
