@@ -1,116 +1,432 @@
 # MomentMint
 
-MomentMint turns Twitch viewers' `!moment` nominations into a creator-controlled highlight inbox. The community finds moments; the streamer decides what gets clipped and shared.
+> Turn community reactions into creator-controlled Twitch highlights.
 
-## Current status
+MomentMint is a Twitch creator workspace that turns viewer `!moment` nominations into organized, verifiable clip candidates. It groups nominations by broadcast, counts distinct viewers, creates clips asynchronously through Twitch, and generates editable metadata with Workers AI.
 
-Phases 1–7 are implemented: the repository now includes durable D1/Queue foundations, encrypted Twitch OAuth/session handling, EventSub ingestion, nomination grouping, verified Twitch clip jobs, Workers AI metadata with fallback, and the creator dashboard workflow.
+The community identifies what deserves a second look. The creator stays in control of what gets clipped, reviewed, edited, and shared.
 
-Production hardening is implemented locally: authenticated action rate limits, security headers, request correlation IDs, trusted Twitch URL validation, a D1-backed readiness check, and a guarded production deploy command. Live Cloudflare/Twitch validation still requires the production account, resources, credentials, and public hostname. See [the master implementation plan](plans/master-plan.md) and [the phase plans](plans/).
+## Hackathon demo
 
-## Local development
+Live demo: **[moment-mint.abbasbhp787.workers.dev](https://moment-mint.abbasbhp787.workers.dev)**
 
-Requirements:
+Recommended demo path:
 
-- Node.js compatible with the installed toolchain
+1. Connect a Twitch broadcaster account.
+2. Open Settings and register EventSub chat listening.
+3. Send `!moment` in the broadcaster’s Twitch chat from one or more viewers.
+4. Open the dashboard and select the resulting community candidate.
+5. Create or retry the Twitch clip and wait for Twitch’s Get Clips confirmation.
+6. Generate AI metadata, review the evidence notice, edit the fields, and mark the candidate reviewed.
+
+The dashboard keeps candidates grouped under their broadcast so moments from separate streams do not get mixed together.
+
+## Why MomentMint?
+
+Great stream moments are often discovered by the audience before the streamer notices them. Existing workflows make the creator manually search chat, remember timestamps, create clips, wait for Twitch publication, and write social copy.
+
+MomentMint compresses that workflow into a creator-controlled inbox:
+
+```text
+Viewer types !moment
+        ↓
+EventSub webhook → durable queue → distinct-viewer grouping
+        ↓
+Broadcast-aware candidate inbox
+        ↓
+Twitch clip request → Get Clips verification
+        ↓
+Editable AI metadata → creator review
+```
+
+## What is implemented
+
+### Community nominations
+
+- Exact, case-insensitive `!moment` command handling.
+- Distinct-viewer counting with duplicate protection.
+- Configurable nomination threshold and grouping window.
+- Candidates are preserved even when clipping or AI generation fails.
+
+### Broadcast-aware organization
+
+- Candidates are grouped by Twitch stream session.
+- Current stream title, category, Twitch stream ID, and start time are synchronized from Twitch Get Streams.
+- A new Twitch stream creates a new session instead of mixing moments with the previous broadcast.
+- Stream groups and moments have explicit time/support sorting.
+
+### Verified Twitch clips
+
+- Manual clip creation with explicit creator confirmation.
+- Optional automatic clipping, disabled by default.
+- Twitch clip creation is asynchronous and retryable.
+- A clip is not marked ready until Twitch confirms it through Get Clips.
+- VOD-not-ready conditions are retried within a bounded window.
+- Trusted Twitch URL validation protects preview and edit links.
+
+### Responsible AI metadata
+
+- Workers AI model: `@cf/openai/gpt-oss-20b`.
+- Metadata is editable before sharing.
+- The model is explicitly told that it has not watched the video.
+- Unsupported visual, audio, gameplay, identity, and outcome claims are rejected.
+- GPT-OSS response variants are parsed defensively, including reasoning truncation and wrapped JSON.
+- AI failures produce safe fallback metadata rather than blocking the workflow.
+- The UI explains whether metadata used community evidence, had no usable context, or fell back safely.
+
+### Privacy and creator control
+
+- Twitch tokens are encrypted server-side with AES-GCM.
+- Browser clients never receive Twitch access or refresh tokens.
+- Queue messages contain IDs and control data, not credentials or raw chat.
+- Community context is opt-in, sanitized, creator-scoped, bounded, and short-lived.
+- Chat context expires within 24 hours after metadata generation and never later than seven days after collection.
+- MomentMint does not publish to social networks automatically.
+
+## Architecture
+
+```text
+React + Vite SPA
+       │
+       ▼
+Cloudflare Worker / Hono API
+       │
+       ├── Twitch OAuth + encrypted sessions
+       ├── EventSub verification + webhook ingestion
+       ├── D1 repositories and state transitions
+       └── Queue producer
+               │
+               ▼
+        Cloudflare Queues consumer
+               │
+               ├── Nomination grouping
+               ├── Twitch stream synchronization
+               ├── Clip creation and verification
+               └── Workers AI metadata generation
+
+Cloudflare D1 = durable source of truth
+Cloudflare Queues = asynchronous work and retry boundary
+Cloudflare Workers AI = editable metadata suggestions
+Twitch Helix/EventSub = stream, chat, and clip lifecycle
+```
+
+### System architecture
+
+```mermaid
+flowchart LR
+    UI[React dashboard] --> API[Cloudflare Worker / Hono]
+    API --> D1[(Cloudflare D1)]
+    API --> Q[Cloudflare Queue]
+    Q --> Worker[Queue consumer]
+    Worker --> Twitch[Twitch Helix + EventSub]
+    Worker --> AI[Workers AI]
+    Q --> DLQ[Dead-letter queue]
+    Worker --> D1
+    API --> Assets[Worker assets / SPA]
+```
+
+### Nomination-to-candidate flow
+
+```mermaid
+sequenceDiagram
+    actor Viewer
+    participant TwitchChat as Twitch chat
+    participant Helix as Twitch Helix API
+    participant EventSub as EventSub webhook
+    participant Queue as Cloudflare Queue
+    participant Domain as Moment domain
+    participant D1 as D1 database
+    participant Dashboard as Creator dashboard
+
+    Viewer->>TwitchChat: Type !moment
+    TwitchChat->>EventSub: channel.chat.message notification
+    EventSub->>EventSub: Verify HMAC, timestamp, replay window
+    EventSub->>D1: Store durable webhook event
+    EventSub->>Queue: Enqueue event ID
+    Queue->>Domain: Process event
+    Domain->>Helix: Resolve current stream metadata
+    Domain->>D1: Create or reuse stream session
+    Domain->>D1: Deduplicate viewer and update count
+    Domain->>D1: Create or update candidate
+    Dashboard->>D1: Poll creator-scoped moments
+    D1-->>Dashboard: Broadcast-grouped candidates
+```
+
+### Broadcast grouping flow
+
+```mermaid
+flowchart TD
+    Nomination[New !moment nomination] --> Streams[Get current Twitch stream]
+    Streams --> Same{Same Twitch stream ID?}
+    Same -->|Yes| Update[Update title, category, start time]
+    Same -->|No| End[End previous stream session]
+    End --> Create[Create new broadcast session]
+    Update --> Attach[Attach moment to session]
+    Create --> Attach
+    Attach --> Group[Show moments inside their broadcast]
+```
+
+### Clip lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUEUED: Creator confirms
+    QUEUED --> CREATING: Queue consumer claims job
+    CREATING --> CREATING: VOD still catching up
+    CREATING --> VERIFYING: Twitch returns clip ID
+    VERIFYING --> VERIFYING: Get Clips not ready
+    VERIFYING --> READY_FOR_REVIEW: Twitch confirms clip
+    VERIFYING --> RETRYABLE_FAILED: Bounded verification expires
+    CREATING --> RETRYABLE_FAILED: Temporary Twitch/VOD failure
+    CREATING --> FAILED: Permanent failure
+    RETRYABLE_FAILED --> QUEUED: Creator retries
+    READY_FOR_REVIEW --> [*]
+    FAILED --> [*]
+```
+
+### AI metadata flow
+
+```mermaid
+flowchart LR
+    Candidate[Verified or selected candidate] --> Context[Stream details + nomination count + optional bounded chat context]
+    Context --> Prompt[Grounded metadata prompt]
+    Prompt --> Model[Workers AI GPT-OSS]
+    Model --> Parse[Parse response variants]
+    Parse --> Schema[Validate metadata schema]
+    Schema --> Claims[Reject unsupported video claims]
+    Claims --> Ready[Editable metadata]
+    Model -. unavailable / truncated .-> Fallback[Safe fallback metadata]
+    Parse -. invalid .-> Fallback
+    Claims -. rejected .-> Fallback
+    Ready --> Review[Creator reviews and edits]
+    Fallback --> Review
+```
+
+## How MomentMint uses Twitch
+
+MomentMint uses Twitch for identity, live chat signals, stream identity, and clip creation. Twitch remains the source of truth for stream and clip availability; MomentMint stores workflow state and creator decisions around it.
+
+| Twitch capability | API or mechanism | How MomentMint uses it |
+|---|---|---|
+| Creator connection | OAuth authorization code flow | Connects the broadcaster, validates the returned token, checks scopes, and encrypts access/refresh tokens server-side. |
+| Chat nominations | EventSub `channel.chat.message` over webhook | Receives chat messages, verifies Twitch’s HMAC signature, ignores replays, and queues only a durable event ID for processing. |
+| Stream identity | `GET /helix/streams?user_id=...&first=1` | Resolves the current Twitch stream ID, title, category, and start time so moments are separated by broadcast. |
+| Current stream clip | `POST /helix/videos/clips` | Creates a clip from the matching VOD offset using the broadcaster/editor identity, duration, and title. |
+| Clip verification | `GET /helix/clips?id=...` | Polls Twitch until the clip exists before marking it ready for review. |
+| Clip editing | Twitch `edit_url` | Opens Twitch’s creator-controlled edit flow after validating and encrypting the URL. |
+| Token health | OAuth token validation and refresh | Refreshes expiring tokens server-side and moves the creator to reconnect-required when refresh fails. |
+
+### Required Twitch scopes
+
+The OAuth flow requests and validates:
+
+```text
+user:read:chat
+user:bot
+channel:bot
+channel:manage:clips
+```
+
+### Why clip verification is asynchronous
+
+Twitch creates clips asynchronously. MomentMint therefore keeps a clip in a creating or verifying state and calls Get Clips before showing it as ready. If the live VOD has not caught up yet, the candidate remains available for bounded retry instead of being discarded.
+
+See the [Twitch API reference](https://dev.twitch.tv/docs/api/reference) for the official stream and clip endpoint contracts.
+
+## Technology
+
+- React 19 + TypeScript
+- Vite + Cloudflare Vite plugin
+- Cloudflare Workers
+- Hono
+- Cloudflare D1 (SQLite)
+- Cloudflare Queues + dead-letter queue
+- Cloudflare Workers AI
+- Twitch OAuth, EventSub, and Helix API
+- TanStack Query
+- Tailwind CSS + shadcn-style UI primitives
+- Vitest + Cloudflare Vitest plugin
+- Oxlint
+
+## Repository structure
+
+```text
+src/                    React dashboard and product UI
+worker/                 Hono routes, domain logic, Twitch, AI, queues
+shared/                 Shared Zod contracts and state definitions
+database/               D1 schema and forward-only migrations
+tests/                  Unit and Cloudflare Worker integration tests
+plans/                  Product and implementation phase plans
+scripts/                Production checks and deployment helpers
+wrangler.jsonc          Cloudflare Worker, D1, Queue, and AI bindings
+```
+
+## Run locally
+
+### Requirements
+
+- Node.js compatible with the checked-in toolchain
 - pnpm
-- Cloudflare Wrangler access for later integration phases
+- A Cloudflare account for Worker/D1/Queue integration
+- A Twitch developer application for OAuth and EventSub
 
-Install dependencies and start the Vite/Worker-aware development server:
+### Install and start
 
 ```sh
 pnpm install
+pnpm exec wrangler d1 migrations apply momentmint --local
 pnpm dev
 ```
 
-The health endpoints are `/health` and `/health/ready`. Local values can be copied from `.dev.vars.example` into a local `.dev.vars` file; `.dev.vars` is ignored by Git.
+Copy `.dev.vars.example` to `.dev.vars` and provide local values. `.dev.vars` is ignored by Git and must never be committed.
 
-Apply the local D1 migration with `pnpm exec wrangler d1 migrations apply momentmint --local` before exercising authenticated routes. Twitch EventSub requires a public HTTPS callback URL in deployed environments.
+Useful local endpoints:
+
+```text
+/health
+/health/ready
+```
+
+Twitch EventSub requires a public HTTPS callback URL, so full chat ingestion is intended for a deployed Worker or a secure tunnel with a matching Twitch callback.
 
 ## Production deployment
 
-The repository does not create or select Cloudflare resources automatically. Complete these steps while authenticated to the intended Cloudflare account:
+Authenticate Wrangler against the intended Cloudflare account:
 
-1. Create the resources and record the returned D1 `database_id`:
+```sh
+pnpm exec wrangler login
+```
 
-   ```sh
-   pnpm exec wrangler login
-   pnpm exec wrangler d1 create momentmint
-   pnpm exec wrangler queues create momentmint-jobs
-   pnpm exec wrangler queues create momentmint-jobs-dlq
-   ```
+Create or configure the production resources:
 
-2. Update `wrangler.jsonc` with the real D1 ID, public HTTPS `APP_BASE_URL`, Twitch client ID, and matching `TWITCH_REDIRECT_URI`. The callback must be `https://YOUR_HOST/oauth/twitch/callback`; do not deploy the localhost values.
+```sh
+pnpm exec wrangler d1 create momentmint
+pnpm exec wrangler queues create momentmint-jobs
+pnpm exec wrangler queues create momentmint-jobs-dlq
+```
 
-3. Apply the migrations remotely:
+Set the production D1 ID and public URLs in `wrangler.jsonc`. The Twitch callback must exactly match:
 
-   ```sh
-   pnpm exec wrangler d1 migrations apply momentmint --remote
-   ```
+```text
+https://YOUR_HOST/oauth/twitch/callback
+```
 
-4. Set secrets without putting them in source control:
+Set secrets through Wrangler:
 
-   ```sh
-   pnpm exec wrangler secret put TWITCH_CLIENT_SECRET
-   pnpm exec wrangler secret put TOKEN_ENCRYPTION_KEY
-   pnpm exec wrangler secret put SESSION_SECRET
-   pnpm exec wrangler secret put EVENTSUB_SECRET
-   ```
+```sh
+pnpm exec wrangler secret put TWITCH_CLIENT_SECRET
+pnpm exec wrangler secret put TOKEN_ENCRYPTION_KEY
+pnpm exec wrangler secret put SESSION_SECRET
+pnpm exec wrangler secret put EVENTSUB_SECRET
+```
 
-   `TOKEN_ENCRYPTION_KEY` must be a base64 encoding of 32 random bytes. A local value can be generated with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+`TOKEN_ENCRYPTION_KEY` must be a base64 encoding of 32 random bytes. Generate one locally with:
 
-5. Add the exact HTTPS callback URL to the Twitch developer application, then run the guarded deployment:
+```sh
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
 
-   ```sh
-   pnpm run deploy:production
-   ```
+Deploy with the guarded production command:
 
-   This command first applies pending remote D1 migrations, then fails before deployment if the Wrangler file still contains placeholders, localhost values, or an invalid D1 ID. The Wrangler account must have access to the configured D1 database.
+```sh
+pnpm run deploy:production
+```
 
-6. Smoke-test the deployed service and inspect Worker logs:
+The command runs production configuration checks, applies pending remote D1 migrations, builds the Worker and SPA, removes local production artifacts, and deploys the Worker.
 
-   ```sh
-   curl https://YOUR_HOST/health
-   curl https://YOUR_HOST/health/ready
-   pnpm exec wrangler tail
-   ```
+## Configuration
 
-   Then sign in through Twitch, register EventSub from Settings, send a real `!moment`, and verify the resulting clip through the creator review flow. Do not claim live readiness until these checks pass against the intended account and hostname.
+Public Worker variables:
 
-### Cloudflare Workers Builds
+| Variable | Purpose |
+|---|---|
+| `APP_BASE_URL` | Public Worker origin |
+| `TWITCH_CLIENT_ID` | Twitch application client ID |
+| `TWITCH_REDIRECT_URI` | Exact OAuth callback URL |
+| `AI_MODEL_ID` | Workers AI model, currently `@cf/openai/gpt-oss-20b` |
+| `DEFAULT_GROUP_WINDOW_SECONDS` | Default nomination grouping window |
+| `DEFAULT_UNIQUE_VIEWER_THRESHOLD` | Default distinct-viewer threshold |
 
-For a repository-connected Worker build, use the repository root as the root directory and `pnpm run build` as the build command. Cloudflare installs dependencies automatically; do not replace the install step with a custom command. The checked-in `pnpm-workspace.yaml` explicitly includes the root package so Cloudflare's pnpm 9 runtime can install it with `--frozen-lockfile`.
+Secrets:
 
-Configure these production values in the Worker environment before the first live deployment:
+| Secret | Purpose |
+|---|---|
+| `TWITCH_CLIENT_SECRET` | Twitch OAuth exchange and token refresh |
+| `TOKEN_ENCRYPTION_KEY` | AES-GCM encryption for Twitch tokens and edit URLs |
+| `SESSION_SECRET` | Creator session signing/encryption |
+| `EVENTSUB_SECRET` | Twitch webhook signature verification |
 
-- Variables: `APP_BASE_URL`, `TWITCH_CLIENT_ID`, `TWITCH_REDIRECT_URI`, `AI_MODEL_ID`, `DEFAULT_GROUP_WINDOW_SECONDS`, `DEFAULT_UNIQUE_VIEWER_THRESHOLD`.
-- Secrets: `TWITCH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `SESSION_SECRET`, `EVENTSUB_SECRET`.
+Never place secrets in source control, frontend environment variables, screenshots, logs, or README files.
 
-Never commit or paste `TWITCH_CLIENT_SECRET` into the repository. Add the exact callback `APP_BASE_URL/oauth/twitch/callback` to the Twitch developer application.
+## Verification
 
-## Verification commands
+Run the complete local quality gate:
 
 ```sh
 pnpm test
 pnpm run build
 pnpm run lint
 pnpm run production:check
+git diff --check
 ```
 
-## Configuration and secrets
+After deployment:
 
-Public Worker variables are `APP_BASE_URL`, `TWITCH_CLIENT_ID`, `TWITCH_REDIRECT_URI`, `AI_MODEL_ID`, `DEFAULT_GROUP_WINDOW_SECONDS`, and `DEFAULT_UNIQUE_VIEWER_THRESHOLD`.
+```sh
+curl https://YOUR_HOST/health
+curl https://YOUR_HOST/health/ready
+pnpm exec wrangler tail moment-mint
+```
 
-Keep `TWITCH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `SESSION_SECRET`, and `EVENTSUB_SECRET` in local `.dev.vars` or deployed Wrangler secrets. Never place real values in source control, frontend environment variables, screenshots, or logs.
+For a real Twitch validation, verify OAuth, EventSub registration, a chat nomination, stream grouping, clip creation, Get Clips confirmation, metadata generation, fallback behavior, and creator review.
 
-Production protections include CSP and related browser security headers, HTTPS HSTS, request IDs in API responses and error logs, creator-scoped limits on manual clip and AI generation actions, and an allow-list for Twitch HTTPS URLs before they are stored or returned. The readiness endpoint checks D1 connectivity without exposing configuration values.
+## API surface
 
-The current root layout intentionally stays as one Cloudflare Vite application. Product code will be added under `src/`, Worker code under `worker/`, shared contracts under `shared/`, database migrations under `database/`, and tests under `tests/` as later phases land.
+| Route | Purpose |
+|---|---|
+| `GET /health` | Liveness check |
+| `GET /health/ready` | D1 and production configuration readiness |
+| `GET /oauth/twitch/start` | Start Twitch OAuth |
+| `GET /oauth/twitch/callback` | Complete Twitch OAuth |
+| `POST /webhooks/twitch` | Receive verified EventSub notifications |
+| `GET /api/dashboard/overview` | Dashboard metrics and current stream |
+| `GET /api/moments` | List creator-scoped candidates |
+| `GET /api/moments/:momentId` | Candidate detail, clips, nominations, metadata |
+| `POST /api/moments/:momentId/clip` | Request a creator-confirmed clip |
+| `POST /api/clip-jobs/:clipJobId/retry` | Retry an eligible clip job |
+| `POST /api/moments/:momentId/ai-metadata` | Queue metadata generation |
+| `PATCH /api/moments/:momentId/metadata` | Save edited metadata |
+| `POST /api/moments/:momentId/review` | Mark a candidate reviewed or dismissed |
+| `GET /api/settings` | Read creator settings and disclosures |
+| `PATCH /api/settings` | Update creator settings |
 
-## Product guardrails
+All `/api/*` routes are creator-authenticated and creator-scoped.
 
-- Automatic clip creation is off until Twitch's current publication/edit behavior is tested and disclosed.
-- A Twitch clip is not shown as ready until Twitch confirms it through Get Clips.
-- Approximate EventSub timing is never presented as a precise video frame.
-- MomentMint does not publish to third-party social networks in the MVP.
-- Ordinary chat messages are not retained indefinitely. If the creator enables AI community context, MomentMint keeps only a sanitized, creator-scoped sample around nominated moments. It expires within 24 hours after metadata generation and never later than seven days after collection; otherwise only the minimum EventSub data needed to form and process a moment is persisted.
+## MVP boundaries
+
+MomentMint intentionally does not include:
+
+- Automatic social publishing.
+- Video downloading, storage, or editing.
+- Computer vision or AI video watching.
+- Multi-channel team workspaces.
+- Gamification or viewer leaderboards.
+- Guaranteed frame-perfect timestamps; EventSub timing is an approximate anchor.
+
+These boundaries keep the hackathon prototype focused on a reliable, transparent path from community signal to creator-approved highlight.
+
+## Known limitations
+
+- Twitch controls clip publication and edit-link availability; MomentMint waits for Twitch confirmation.
+- A stream title/category cannot be recovered for historical offline sessions if it was never captured while the stream was live.
+- Workers AI suggestions remain editable and should be reviewed before sharing.
+- Community context is opt-in and may be unavailable when no usable chat messages were captured around a nomination.
+- Full end-to-end Twitch validation requires a real broadcaster account, public HTTPS Worker, Twitch application, and configured Cloudflare resources.
+
+## Responsible AI note
+
+MomentMint uses AI to draft metadata, not to decide what happened in a video. The model is told it has not watched the clip, chat is treated as untrusted evidence, generated fields are schema-validated, unsupported claims are rejected, and deterministic fallback metadata is retained when AI is unavailable. The creator always reviews and controls the final text.
+
+## License and hackathon note
+
+This repository is prepared as a hackathon submission and is not presented as a finished commercial service. Review the configured Twitch and Cloudflare terms, quotas, pricing, and production limits before operating it at scale.
