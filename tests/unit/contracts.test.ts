@@ -55,6 +55,8 @@ describe("MomentMint contracts", () => {
 
   it("validates AI JSON and provides grounded fallback metadata", () => {
     expect(parseMetadataOutput({ response: '{"title":"A clutch save","summary":"Community nominated highlight","category":"clutch","socialCaption":"A clutch save from the stream."}' })?.category).toBe("clutch")
+    expect(parseMetadataOutput({ response: { title: "A reaction", summary: "Viewers reacted strongly.", category: "reaction", socialCaption: "A community-nominated reaction." } })?.category).toBe("reaction")
+    expect(parseMetadataOutput({ response: "Here is the JSON:\n{\"title\":\"A reaction\",\"summary\":\"Viewers reacted strongly.\",\"category\":\"reaction\",\"socialCaption\":\"A community-nominated reaction.\"}" })?.category).toBe("reaction")
     expect(parseMetadataOutput({ output: [{ type: "message", content: [{ type: "output_text", text: '{"title":"A reaction","summary":"Viewers reacted strongly.","category":"reaction","socialCaption":"A community-nominated reaction."}' }] }] })?.category).toBe("reaction")
     expect(buildAiInput("@cf/openai/gpt-oss-20b", [{ role: "user", content: "Return OK." }])).toEqual({ messages: [{ role: "user", content: "Return OK." }] })
     expect(buildAiInput("@cf/meta/llama-3.1-8b-instruct", [{ role: "user", content: "Return OK." }])).toEqual({ messages: [{ role: "user", content: "Return OK." }] })

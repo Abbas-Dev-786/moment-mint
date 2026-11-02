@@ -45,7 +45,8 @@ const modelText = (value: unknown): string | null => {
   if (typeof value === "string") return value
   if (!value || typeof value !== "object") return null
   const record = value as Record<string, unknown>
-  for (const key of ["response", "output_text", "text", "content", "output"]) {
+  if (typeof record.title === "string" && typeof record.summary === "string" && typeof record.category === "string" && typeof record.socialCaption === "string") return JSON.stringify(record)
+  for (const key of ["response", "output_text", "text", "content", "output", "message", "delta"]) {
     const candidate = record[key]
     if (typeof candidate === "string") return candidate
     if (candidate && typeof candidate === "object") {
@@ -58,12 +59,52 @@ const modelText = (value: unknown): string | null => {
   return null
 }
 
+const parseJsonText = (text: string): Record<string, unknown> | null => {
+  const unfenced = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim()
+  const candidates = [unfenced]
+  let start = -1
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = 0; index < unfenced.length; index += 1) {
+    const character = unfenced[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === "\\") escaped = true
+      else if (character === '"') quoted = false
+      continue
+    }
+    if (character === '"') {
+      quoted = true
+      continue
+    }
+    if (character === "{" && depth === 0) start = index
+    if (character === "{" && start >= 0) depth += 1
+    if (character === "}" && start >= 0) {
+      depth -= 1
+      if (depth === 0) {
+        candidates.push(unfenced.slice(start, index + 1))
+        start = -1
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+    } catch {
+      // Try the next balanced JSON object when the model added prose.
+    }
+  }
+  return null
+}
+
 export const parseMetadataOutput = (value: unknown) => {
   const text = modelText(value)?.trim()
   if (!text) return null
-  const unfenced = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
   try {
-    const parsed = JSON.parse(unfenced) as Record<string, unknown>
+    const parsed = parseJsonText(text)
+    if (!parsed) return null
     const normalized = { ...parsed, socialCaption: parsed.socialCaption ?? parsed.social_caption }
     return aiMetadataSchema.parse(normalized)
   } catch {
