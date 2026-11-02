@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { creatorSettingsSchema, eventSubPayloadSchema, queueMessageSchema } from "../../shared/contracts/domain.js"
 import { decryptSecret, encryptSecret, hmacSha256Hex } from "../../worker/lib/crypto.js"
 import { isMomentCommand, selectGroupingCandidate } from "../../worker/domain/nomination.js"
-import { buildMetadataPrompt, fallbackMetadata, isGroundedMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
+import { buildAiInput, buildMetadataPrompt, fallbackMetadata, isGroundedMetadata, parseMetadataOutput } from "../../worker/ai/metadata.js"
 import { CHAT_CONTEXT_AFTER_SECONDS, CHAT_CONTEXT_BEFORE_SECONDS, contextConfidenceFallback, contextEvidenceFallback, contextRetentionExpiry, chatContextWindow, sanitizeChatText } from "../../worker/domain/chat-context.js"
 import { safeEventPayload } from "../../worker/eventsub.js"
 import { CLIP_VERIFICATION_DEADLINE_SECONDS, MAX_CLIP_VERIFICATION_ATTEMPTS, shouldRetryClipCreation } from "../../worker/domain/jobs.js"
@@ -55,6 +55,9 @@ describe("MomentMint contracts", () => {
 
   it("validates AI JSON and provides grounded fallback metadata", () => {
     expect(parseMetadataOutput({ response: '{"title":"A clutch save","summary":"Community nominated highlight","category":"clutch","socialCaption":"A clutch save from the stream."}' })?.category).toBe("clutch")
+    expect(parseMetadataOutput({ output: [{ type: "message", content: [{ type: "output_text", text: '{"title":"A reaction","summary":"Viewers reacted strongly.","category":"reaction","socialCaption":"A community-nominated reaction."}' }] }] })?.category).toBe("reaction")
+    expect(buildAiInput("@cf/openai/gpt-oss-20b", [{ role: "user", content: "Return OK." }])).toEqual({ messages: [{ role: "user", content: "Return OK." }] })
+    expect(buildAiInput("@cf/meta/llama-3.1-8b-instruct", [{ role: "user", content: "Return OK." }])).toEqual({ messages: [{ role: "user", content: "Return OK." }] })
     expect(parseMetadataOutput({ response: '{"title":"invented","summary":"bad","category":"not-real","socialCaption":"x"}' })).toBeNull()
     expect(buildMetadataPrompt({ approximateTimestamp: "2026-10-30T00:00:00Z", distinctNominatorCount: 2 })).toContain("NOT watched the video")
     expect(fallbackMetadata({ anchor_eventsub_at: "2026-10-30T00:00:00Z", unique_nominator_count: 2 }).summary).toContain("2 distinct viewers")

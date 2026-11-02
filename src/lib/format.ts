@@ -26,7 +26,7 @@ export const statusLabel = (value: string | null | undefined) => {
     FAILED: "Failed",
     PENDING: "In progress",
     READY: "Ready",
-    FAILED_WITH_FALLBACK: "Ready with fallback",
+    FAILED_WITH_FALLBACK: "Fallback metadata",
     NO_CLIP: "No clip yet",
     NOT_REQUESTED: "Not requested",
   }
