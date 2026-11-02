@@ -34,8 +34,23 @@ function DashboardPage() {
       if (current) current.moments.push(moment)
       else groups.set(moment.stream_session_id, { id: moment.stream_session_id, title: moment.stream_title, category: moment.stream_category_name, startedAt: moment.stream_started_at, status: moment.stream_status, moments: [moment] })
     }
-    return Array.from(groups.values())
-  }, [sortedMoments])
+    const timestamp = (value: string | null | undefined) => {
+      const parsed = value ? Date.parse(value) : Number.NaN
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      moments: [...group.moments].sort((left, right) => sortMode === "support" ? right.unique_nominator_count - left.unique_nominator_count || timestamp(right.anchor_eventsub_at) - timestamp(left.anchor_eventsub_at) : timestamp(right.anchor_eventsub_at) - timestamp(left.anchor_eventsub_at)),
+    })).sort((left, right) => {
+      if (sortMode === "support") {
+        const supportDelta = Math.max(...right.moments.map((moment) => moment.unique_nominator_count)) - Math.max(...left.moments.map((moment) => moment.unique_nominator_count))
+        if (supportDelta !== 0) return supportDelta
+      }
+      const rightLatest = Math.max(...right.moments.map((moment) => timestamp(moment.anchor_eventsub_at)), timestamp(right.startedAt))
+      const leftLatest = Math.max(...left.moments.map((moment) => timestamp(moment.anchor_eventsub_at)), timestamp(left.startedAt))
+      return rightLatest - leftLatest
+    })
+  }, [sortedMoments, sortMode])
 
   if (me.isPending) return <LoadingState />
   if (me.isError && me.error instanceof ApiRequestError && me.error.status === 401) return <DisconnectedState />
@@ -44,6 +59,7 @@ function DashboardPage() {
   const dashboard = overview.data
   const stale = overview.isFetching || overview.isError
   const eventSubReady = dashboard?.eventSub?.status === "enabled"
+  const currentStreamLabel = dashboard?.stream?.title || (dashboard?.stream?.status === "LIVE" ? "Live stream" : dashboard?.stream?.status === "UNKNOWN" ? "Stream details unavailable" : "No active stream")
 
   return (
     <section aria-labelledby="dashboard-title" className="space-y-8">
@@ -56,7 +72,7 @@ function DashboardPage() {
         {!eventSubReady && <Feedback action="Open connection" onAction={() => { window.location.href = "/connect" }} title="Chat listening is not ready" tone="info">Connect EventSub before expecting new !moment nominations. Your saved moments are still safe.</Feedback>}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard label="Connection" value={dashboard?.connection.status === "CONNECTED" ? dashboard.connection.displayName : "Reconnect needed"} />
-          <MetricCard label="Stream" value={dashboard?.stream?.status ?? "Waiting"} />
+          <MetricCard label="Current stream" value={currentStreamLabel} />
           <MetricCard label="Nominations today" value={String(dashboard?.metrics.nominationsToday ?? 0)} />
           <MetricCard label="Candidates" value={String(dashboard?.metrics.moments ?? 0)} />
           <MetricCard label="Clips ready" value={String(dashboard?.metrics.readyClips ?? 0)} />
@@ -71,7 +87,7 @@ function DashboardPage() {
             {moments.isPending && <p className="rounded-xl bg-muted/40 p-5 text-sm text-muted-foreground">Loading candidates…</p>}
             {moments.isError && <RequestError error={moments.error} onRetry={() => void moments.refetch()} title="Moments could not be loaded" />}
             {!moments.isPending && !moments.isError && sortedMoments.length === 0 && <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="font-medium">No moments yet</p><p className="mt-2 text-sm leading-6 text-muted-foreground">When viewers type <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">!moment</code>, nearby nominations will appear here. One viewer cannot inflate the count by repeating the command.</p></div>}
-            {streamGroups.map((group) => <section aria-labelledby={`stream-${group.id}`} className="rounded-2xl border border-border/70 bg-card/35 p-3" key={group.id}><div className="flex items-start justify-between gap-3 rounded-xl bg-muted/35 p-4"><div className="min-w-0"><p className="text-xs font-medium tracking-wide text-primary">Broadcast session</p><h3 className="mt-1 truncate font-heading text-lg" id={`stream-${group.id}`}>{group.title || "Untitled stream"}</h3><p className="mt-1 text-sm text-muted-foreground">{group.category || "Category unavailable"} · Started {formatApproximateTime(group.startedAt)} · {group.moments.length} moment{group.moments.length === 1 ? "" : "s"}</p></div><StatusPill value={group.status} label={group.status === "UNKNOWN" ? "Stream recorded" : undefined} /></div><div className="mt-3 grid gap-3">{group.moments.map((moment) => <MomentCard key={moment.id} moment={moment} onSelect={() => setSelectedMomentId(moment.id)} selected={selectedMomentId === moment.id} />)}</div></section>)}
+            {streamGroups.map((group) => <section aria-labelledby={`stream-${group.id}`} className="rounded-2xl border border-border/70 bg-card/35 p-3" key={group.id}><div className="flex items-start justify-between gap-3 rounded-xl bg-muted/35 p-4"><div className="min-w-0"><p className="text-xs font-medium tracking-wide text-primary">Broadcast session</p><h3 className="mt-1 truncate font-heading text-lg" id={`stream-${group.id}`}>{group.title || "Untitled broadcast"}</h3><p className="mt-1 text-sm text-muted-foreground">{group.category || "Category not provided"} · Started {formatApproximateTime(group.startedAt)} · {group.moments.length} moment{group.moments.length === 1 ? "" : "s"}</p></div><StatusPill value={group.status} label={group.status === "LIVE" ? "Live now" : group.status === "ENDED" ? "Ended" : "Stream details unavailable"} /></div><div className="mt-3 grid gap-3">{group.moments.map((moment) => <MomentCard key={moment.id} moment={moment} onSelect={() => setSelectedMomentId(moment.id)} selected={selectedMomentId === moment.id} />)}</div></section>)}
           </CardContent>
         </Card>
         {selectedMomentId ? <MomentDetail key={selectedMomentId} momentId={selectedMomentId} /> : <Card className="border-dashed"><CardContent className="grid min-h-80 place-items-center p-8 text-center"><div><div aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-full bg-primary/10 text-2xl text-primary">✦</div><h2 className="mt-4 font-heading text-xl">Choose a candidate</h2><p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Open a candidate to inspect its approximate timing, verified clip state, and editable metadata.</p></div></CardContent></Card>}

@@ -2,6 +2,7 @@ import { env, SELF } from "cloudflare:test"
 import { expect, it } from "vitest"
 
 import { attachUnassignedContextToMoment, captureChatContextEvent, deleteExpiredChatContext, findChatContextForMoment } from "../../worker/domain/chat-context.js"
+import { findOrCreateStreamSession } from "../../worker/repositories/stream.js"
 
 it("serves the Worker health contract", async () => {
   const response = await SELF.fetch("https://momentmint.test/health")
@@ -34,7 +35,7 @@ it("captures bounded, deduplicated, creator-scoped context and cleans expired ro
   const anchor = "2026-10-30T00:00:00.000Z"
   await env.DB.exec(`
     CREATE TABLE IF NOT EXISTS creators (id TEXT PRIMARY KEY, twitch_user_id TEXT NOT NULL UNIQUE, twitch_login TEXT NOT NULL, display_name TEXT NOT NULL, settings_json TEXT NOT NULL, connection_status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS stream_sessions (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, started_at TEXT, ended_at TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS stream_sessions (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, twitch_stream_id TEXT, title TEXT, category_name TEXT, started_at TEXT, ended_at TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS moments (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, stream_session_id TEXT NOT NULL, anchor_eventsub_at TEXT NOT NULL, anchor_received_at TEXT NOT NULL, group_window_seconds INTEGER NOT NULL, threshold_required INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'COLLECTING', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS chat_context_events (id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, moment_id TEXT, stream_session_id TEXT NOT NULL, source_message_id TEXT NOT NULL UNIQUE, message_text TEXT NOT NULL, eventsub_timestamp TEXT NOT NULL, received_at TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL);
   `)
@@ -64,6 +65,11 @@ it("captures bounded, deduplicated, creator-scoped context and cleans expired ro
     await env.DB.prepare("UPDATE chat_context_events SET expires_at = ?1 WHERE moment_id = ?2").bind("2020-01-01T00:00:00.000Z", momentId).run()
     await deleteExpiredChatContext(env.DB, "2021-01-01T00:00:00.000Z")
     expect(await findChatContextForMoment(env.DB, creatorId, momentId, anchor)).toEqual([])
+
+    const firstStream = await findOrCreateStreamSession(env.DB, creatorId, anchor, { twitchStreamId: "twitch_stream_1", title: "First broadcast", categoryName: "Game one", startedAt: anchor })
+    const secondStream = await findOrCreateStreamSession(env.DB, creatorId, "2026-10-30T01:00:00.000Z", { twitchStreamId: "twitch_stream_2", title: "Second broadcast", categoryName: "Game two", startedAt: "2026-10-30T01:00:00.000Z" })
+    expect(firstStream?.id).not.toBe(secondStream?.id)
+    await expect(env.DB.prepare("SELECT status FROM stream_sessions WHERE id = ?1").bind(firstStream?.id).first<{ status: string }>()).resolves.toEqual({ status: "ENDED" })
   } finally {
     await env.DB.prepare("DELETE FROM creators WHERE id IN (?1, ?2)").bind(creatorId, otherCreatorId).run()
   }

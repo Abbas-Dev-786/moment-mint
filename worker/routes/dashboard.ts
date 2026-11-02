@@ -1,15 +1,22 @@
 import type { AuthContext } from "../oauth.js"
 import { creatorSettings, findCreatorById } from "../repositories/creator.js"
 import { findSubscriptionForCreator } from "../repositories/eventsub.js"
-import { findCurrentStreamSession } from "../repositories/stream.js"
+import { findCurrentStreamSession, findOrCreateStreamSession } from "../repositories/stream.js"
+import { getCurrentStream } from "../twitch/client.js"
 
 export const dashboardOverview = async (c: AuthContext) => {
   const creatorId = c.get("creatorId")
   const creator = await findCreatorById(c.env.DB, creatorId)
   if (!creator) return c.json({ error: { code: "UNAUTHORIZED", message: "Connect Twitch to continue." } }, 401)
-  const [subscription, streamSession, nominations, moments, clips, readyClips, processingClips] = await Promise.all([
+  let streamSession = await findCurrentStreamSession(c.env.DB, creatorId)
+  try {
+    const currentStream = await getCurrentStream(c.env, creator)
+    if (currentStream) streamSession = await findOrCreateStreamSession(c.env.DB, creatorId, currentStream.started_at, { twitchStreamId: currentStream.id, title: currentStream.title || null, categoryName: currentStream.game_name || null, startedAt: currentStream.started_at })
+  } catch (error) {
+    console.error("Dashboard stream sync failed", { creatorId, code: error instanceof Error ? error.message : "unknown" })
+  }
+  const [subscription, nominations, moments, clips, readyClips, processingClips] = await Promise.all([
     findSubscriptionForCreator(c.env.DB, creatorId),
-    findCurrentStreamSession(c.env.DB, creatorId),
     c.env.DB.prepare("SELECT COUNT(*) AS count FROM nominations WHERE creator_id = ?1 AND date(received_at) = date('now')").bind(creatorId).first<{ count: number }>(),
     c.env.DB.prepare("SELECT COUNT(*) AS count FROM moments WHERE creator_id = ?1").bind(creatorId).first<{ count: number }>(),
     c.env.DB.prepare("SELECT COUNT(*) AS count FROM clip_jobs WHERE creator_id = ?1").bind(creatorId).first<{ count: number }>(),

@@ -155,6 +155,19 @@ export type TwitchEventSubSubscription = {
   transport?: { method?: string; callback?: string }
 }
 
+export type TwitchStreamRecord = {
+  id: string
+  title: string
+  game_name: string
+  started_at: string
+}
+
+export const getCurrentStream = async (env: { DB: D1Database; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, creator: TwitchCreator) => {
+  const response = await authorizedFetch(env, creator, `/streams?user_id=${encodeURIComponent(creator.twitch_user_id)}&first=1`)
+  const body = await twitchResponse<{ data: TwitchStreamRecord[] }>(response)
+  return body.data[0] ?? null
+}
+
 export const listChatSubscriptions = async (env: { TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string }, broadcasterId: string) => {
   // Twitch allows only one filter on this endpoint. Use user_id here and
   // filter the subscription type at the call site.

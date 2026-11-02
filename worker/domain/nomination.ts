@@ -2,6 +2,7 @@ import { creatorSettings, findCreatorById } from "../repositories/creator.js"
 import { createClipJob } from "../repositories/clip.js"
 import { createMoment, createNominationIfNew, findOpenMomentsForSession, refreshMomentNominatorCount, markMomentThresholdMet, findMomentForCreator } from "../repositories/moment.js"
 import { findOrCreateStreamSession } from "../repositories/stream.js"
+import { getCurrentStream, type TwitchApiError } from "../twitch/client.js"
 import { newId, nowIso } from "../lib/ids.js"
 import { sendQueueMessage } from "../queue/contracts.js"
 import { attachUnassignedContextToMoment } from "./chat-context.js"
@@ -23,14 +24,21 @@ export const selectGroupingCandidate = <T extends { id: string; anchor_eventsub_
   .filter(({ candidate, distance }) => Number.isFinite(distance) && distance <= candidate.group_window_seconds * 1000)
   .sort((left, right) => left.distance - right.distance || left.candidate.id.localeCompare(right.candidate.id))[0]?.candidate
 
-export const processNominationEvent = async (env: { DB: D1Database; MOMENTMINT_JOBS: Queue<import("../../shared/contracts/domain.js").QueueMessage> }, input: { creatorId: string; eventsubTimestamp: string; receivedAt: string; payload: EventPayload }): Promise<NominationResult> => {
+export const processNominationEvent = async (env: { DB: D1Database; MOMENTMINT_JOBS: Queue<import("../../shared/contracts/domain.js").QueueMessage>; TWITCH_CLIENT_ID: string; TWITCH_CLIENT_SECRET: string; TOKEN_ENCRYPTION_KEY: string }, input: { creatorId: string; eventsubTimestamp: string; receivedAt: string; payload: EventPayload }): Promise<NominationResult> => {
   const creator = await findCreatorById(env.DB, input.creatorId)
   if (!creator) return { accepted: false, reason: "INVALID_EVENT" }
   const settings = creatorSettings(creator)
   if (!isMomentCommand(input.payload.message_text, settings.nominationCommand)) return { accepted: false, reason: "NOT_COMMAND" }
   if (!input.payload.broadcaster_user_id || input.payload.broadcaster_user_id !== creator.twitch_user_id || !input.payload.chatter_user_id || !input.payload.message_id) return { accepted: false, reason: "INVALID_EVENT" }
 
-  const session = await findOrCreateStreamSession(env.DB, creator.id, input.eventsubTimestamp)
+  let streamDetails
+  try {
+    const stream = await getCurrentStream(env, creator)
+    if (stream) streamDetails = { twitchStreamId: stream.id, title: stream.title || null, categoryName: stream.game_name || null, startedAt: stream.started_at }
+  } catch (error) {
+    console.error("Twitch stream lookup failed", { creatorId: creator.id, code: (error as TwitchApiError)?.code ?? (error instanceof Error ? error.message : "unknown") })
+  }
+  const session = await findOrCreateStreamSession(env.DB, creator.id, input.eventsubTimestamp, streamDetails)
   if (!session) return { accepted: false, reason: "INVALID_EVENT" }
   const incomingAt = Date.parse(input.eventsubTimestamp)
   if (!Number.isFinite(incomingAt)) return { accepted: false, reason: "INVALID_EVENT" }
